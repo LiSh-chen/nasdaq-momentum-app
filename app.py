@@ -130,20 +130,26 @@ LOOKBACK = st.sidebar.slider("動能週期 (天)", 20, 120, 60, step=1, help="60
 TOP_N = st.sidebar.slider("持有檔數 (Top N)", 3, 10, 5)
 INITIAL_CASH = st.sidebar.number_input("初始資金 ($)", 10000, 1000000, 200000)
 
+# 【新增功能】讓使用者決定是否要開啟濾網
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 🛡️ 風險控管")
+USE_MARKET_FILTER = st.sidebar.checkbox(
+    "啟用 QQQ 200MA 濾網", 
+    value=False, 
+    help="勾選後：當 QQQ 跌破 200MA 時強制空手 (持有現金)。\n取消勾選：無論牛熊市，永遠持有最強的 5 支股票 (獲利可能較高，但回撤也較大)。"
+)
+
 st.sidebar.markdown("---")
 st.sidebar.markdown("### 📖 APP 使用指南")
 st.sidebar.info(
     """
-    **1. 🚦 檢查市場狀態 (K線圖)**
-    * **牛市**：QQQ K棒在橘色 200MA 線之上。
-    * **熊市**：QQQ K棒跌破 200MA 線。
+    **1. 🚦 市場狀態**
+    * 參考最上方 K 線圖。
+    * 橘線為 200日均線。
     
-    **2. 🏆 每月換股**
-    * 參考 **「本月最強 Top 5」**。
-    * 買入持有至下個月底。
-    
-    **3. 🛡️ 風險控管**
-    * 若轉入熊市，建議清空持股。
+    **2. 🏆 策略執行**
+    * **濾網開啟**：熊市空手，牛市選股。
+    * **濾網關閉**：永遠持有 Top 5 強勢股。
     """
 )
 
@@ -216,23 +222,30 @@ try:
     # --- B. 核心訊號 ---
     st.subheader(f"🏆 本月最強 Top {TOP_N} (即時運算)")
     
-    if not is_bull_market:
-        st.error("🛑 **目前處於熊市保護模式 (QQQ < 200MA)！**\n\n策略建議：**100% 持有現金** 或 **短債ETF (BIL)**，暫停買入任何股票。")
+    # 【新增邏輯】根據使用者的開關來決定顯示什麼警語
+    if USE_MARKET_FILTER and (not is_bull_market):
+        st.error("🛑 **熊市保護啟動中 (QQQ < 200MA)**\n\n您已啟用風控濾網，系統建議：**100% 持有現金**。")
+        show_picks = False
+    else:
+        if not is_bull_market:
+            st.warning("⚠️ **注意：目前 QQQ < 200MA，但您選擇「關閉濾網」**。請小心操作，下方顯示強勢股名單：")
+        show_picks = True
     
+    # 始終計算名單，但根據 show_picks 決定是否建議買入
     latest_mom = momentum.iloc[-1].drop('QQQ', errors='ignore')
     latest_mom = latest_mom.sort_values(ascending=False)
     latest_mom = latest_mom[latest_mom > -100] 
-    
     top_picks = latest_mom.head(TOP_N)
     
-    cols = st.columns(TOP_N)
-    for i, (ticker, mom_val) in enumerate(top_picks.items()):
-        if ticker in df_close.columns:
-            current_price = df_close[ticker].iloc[-1]
-            with cols[i]:
-                st.success(f"#{i+1} {ticker}")
-                st.metric("現價", f"${current_price:.2f}")
-                st.metric(f"{LOOKBACK}天漲幅", f"{mom_val*100:.1f}%")
+    if show_picks:
+        cols = st.columns(TOP_N)
+        for i, (ticker, mom_val) in enumerate(top_picks.items()):
+            if ticker in df_close.columns:
+                current_price = df_close[ticker].iloc[-1]
+                with cols[i]:
+                    st.success(f"#{i+1} {ticker}")
+                    st.metric("現價", f"${current_price:.2f}")
+                    st.metric(f"{LOOKBACK}天漲幅", f"{mom_val*100:.1f}%")
             
     with st.expander("查看完整排名列表 (Top 20)"):
         top_20_tickers = latest_mom.head(20).index
@@ -248,7 +261,7 @@ try:
     st.divider()
     st.subheader("📈 策略驗證與回測 (Live Backtest)")
     
-    if st.button("▶️ 執行回測與驗證 (含牛熊濾網)"):
+    if st.button(f"▶️ 執行回測 (濾網狀態: {'開啟' if USE_MARKET_FILTER else '關閉'})"):
         rebalance_dates = df_close.resample('ME').last().index
         equity = [INITIAL_CASH]; cash = INITIAL_CASH; holdings = {}
         history_records = []
@@ -259,9 +272,6 @@ try:
         
         progress_bar = st.progress(0)
         total_steps = len(bt_df) - start_idx
-        
-        # 為了回測時能拿到歷史的 QQQ 200MA，需要對齊索引
-        # 使用 asof 來找最接近的 QQQ 數據 (防止交易日不對齊)
         
         for i in range(start_idx, len(bt_df)):
             curr_date = bt_df.index[i]
@@ -276,33 +286,29 @@ try:
             # 2. 換股日
             if curr_date in rebalance_dates:
                 try:
-                    # 【新增邏輯】回測時的牛熊判斷
-                    # 取得當日 QQQ 價格與 200MA
-                    # 注意：我們用前一日 (i-1) 的數據來決定，模擬「收盤確認後，次日執行」或「當日收盤執行」
-                    # 這裡使用 asof 確保拿到數據
+                    # 取得回測當下時間點的 QQQ 狀態
                     hist_qqq_price = df_qqq['Close'].asof(curr_date)
                     hist_qqq_ma = df_qqq['MA200'].asof(curr_date)
-                    
                     is_bull = hist_qqq_price > hist_qqq_ma
                     
-                    picks = [] # 預設為空 (現金)
+                    picks = []
                     
-                    if is_bull:
-                        # 牛市：選股
+                    # 【核心修改】使用者開關邏輯
+                    # 如果 (不使用濾網) 或 (是牛市) -> 選股
+                    if (not USE_MARKET_FILTER) or is_bull:
                         scores = momentum.iloc[i-1].drop('QQQ', errors='ignore')
                         scores = scores[scores > 0] 
                         picks = scores.sort_values(ascending=False).head(TOP_N).index.tolist()
                     else:
-                        # 熊市：不選股 (picks 保持為空)
-                        pass
+                        # 使用濾網 且 熊市 -> 空手
+                        picks = []
                     
-                    # 紀錄 (若 picks 為空，會記錄 Empty / Cash)
                     history_records.append({
                         'Date': curr_date.strftime('%Y-%m-%d'), 
                         'Stocks': picks if picks else ['CASH (Bear Market)']
                     })
                     
-                    # 執行換倉 (全賣全買)
+                    # 執行換倉
                     pool = cash
                     for t, s in holdings.items():
                         pool += s * bt_df[t].iloc[i] * 0.999 
@@ -315,11 +321,9 @@ try:
                             holdings[t] = size / bt_df[t].iloc[i]
                         cash = 0
                     else:
-                        # 熊市：持有現金
                         cash = pool 
                         
                 except Exception as e:
-                    # print(e)
                     pass
             
             equity.append(val)
@@ -340,7 +344,7 @@ try:
             x=perf_series.index, 
             y=perf_series, 
             mode='lines', 
-            name='Momentum Strategy', 
+            name=f'Strategy (Filter: {USE_MARKET_FILTER})', 
             line=dict(color='#00E676', width=2),
             customdata=pct_return,
             hovertemplate='<b>Date</b>: %{x}<br><b>Equity</b>: $%{y:,.0f}<br><b>Return</b>: %{customdata:.2f}%<extra></extra>'
@@ -363,7 +367,6 @@ try:
             hist_df['Top Picks'] = hist_df['Stocks'].apply(lambda x: ", ".join(x))
             st.dataframe(hist_df[['Date', 'Top Picks']].sort_values('Date', ascending=False), use_container_width=True)
             
-            # 熱圖 (排除 Cash)
             heatmap_data = []
             for rec in history_records:
                 for stock in rec['Stocks']:
