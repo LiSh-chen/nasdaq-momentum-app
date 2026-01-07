@@ -34,9 +34,7 @@ STATIC_BACKUP = [
 # ==========================================
 @st.cache_data(ttl=86400)
 def get_latest_components():
-    """
-    自動抓取 Nasdaq 100 最新成分股
-    """
+    """自動抓取 Nasdaq 100 最新成分股"""
     tickers = []
     try:
         url = "https://en.wikipedia.org/wiki/Nasdaq-100"
@@ -69,21 +67,18 @@ def get_latest_components():
         return STATIC_BACKUP, f"⚠️ 資料來源：系統內建 (連線錯誤: {str(e)[:20]}...)", False
 
 # ==========================================
-# 2. 數據獲取函數 (修復資料格式錯誤)
+# 2. 數據獲取函數
 # ==========================================
 @st.cache_data(ttl=3600)
 def get_qqq_ohlc(lookback_years=5):
-    """專門下載 QQQ 的 OHLC 用於繪圖 (含格式修復)"""
+    """下載 QQQ OHLC 並計算 MA200"""
     start_date = (datetime.now() - timedelta(days=lookback_years*365)).strftime('%Y-%m-%d')
     df = yf.download("QQQ", start=start_date, progress=False, auto_adjust=True)
     
-    # 【關鍵修復】: 如果 yfinance 回傳多層索引 (Price, Ticker)，強制壓平
     if isinstance(df.columns, pd.MultiIndex):
         try:
-            # 嘗試提取 QQQ 層級
             df = df.xs('QQQ', level=1, axis=1)
         except:
-            # 如果失敗，直接丟棄層級 (假設只有一支股票)
             df.columns = df.columns.droplevel(1)
             
     # 計算 200MA
@@ -93,7 +88,7 @@ def get_qqq_ohlc(lookback_years=5):
 
 @st.cache_data(ttl=3600)
 def download_market_data(tickers, lookback_years=5):
-    """下載策略用的收盤價數據"""
+    """下載成分股數據"""
     start_date = (datetime.now() - timedelta(days=lookback_years*365)).strftime('%Y-%m-%d')
     data = yf.download(tickers, start=start_date, interval="1d", progress=False, group_by='ticker', auto_adjust=True)
     
@@ -158,12 +153,11 @@ st.sidebar.info(
 st.title("🚀 Nasdaq 100 動能輪動戰情室")
 
 try:
-    # 1. 獲取清單與來源狀態
+    # 1. 獲取清單與來源
     current_tickers, source_msg, is_live = get_latest_components()
     
     # 2. 數據下載
     with st.spinner(f'正在下載數據 (近5年)...'):
-        # 平行下載
         df_qqq = get_qqq_ohlc() 
         df_close = download_market_data(current_tickers)
         
@@ -172,23 +166,19 @@ try:
     # 3. 計算動能
     momentum = calculate_metrics(df_close, LOOKBACK)
     
-    # 4. 判斷牛熊 (修正：確保轉為純數字)
-    # 使用 float() 強制轉換，避免 Series Ambiguous 錯誤
+    # 4. 判斷牛熊 (目前狀態)
     curr_qqq_price = float(df_qqq['Close'].iloc[-1])
     curr_ma200 = float(df_qqq['MA200'].iloc[-1])
     is_bull_market = curr_qqq_price > curr_ma200
 
-    # --- A. QQQ K線圖與市場狀態 ---
+    # --- A. QQQ K線圖 ---
     st.subheader("🚦 市場趨勢判讀 (QQQ vs 200MA)")
-    
     if is_live:
         st.caption(source_msg)
     else:
         st.warning(source_msg)
 
-    # 繪製 K 線圖
     fig_qqq = go.Figure()
-
     fig_qqq.add_trace(go.Candlestick(
         x=df_qqq.index,
         open=df_qqq['Open'],
@@ -197,7 +187,6 @@ try:
         close=df_qqq['Close'],
         name='QQQ Price'
     ))
-
     fig_qqq.add_trace(go.Scatter(
         x=df_qqq.index, 
         y=df_qqq['MA200'], 
@@ -205,13 +194,9 @@ try:
         name='200 MA',
         line=dict(color='orange', width=2)
     ))
-
     fig_qqq.update_layout(
         title=f'QQQ 趨勢圖 (目前狀態: {"🐂 牛市" if is_bull_market else "🐻 熊市"})',
-        yaxis_title='Price',
-        template='plotly_dark',
-        xaxis_rangeslider_visible=False,
-        height=500
+        yaxis_title='Price', template='plotly_dark', xaxis_rangeslider_visible=False, height=500
     )
     st.plotly_chart(fig_qqq, use_container_width=True)
 
@@ -259,11 +244,11 @@ try:
         top_20_df['Price'] = top_20_df['Price'].map('${:.2f}'.format)
         st.dataframe(top_20_df[['Price', 'Momentum %']], use_container_width=True)
 
-    # --- C. 回測與驗證圖表 ---
+    # --- C. 回測與驗證 ---
     st.divider()
     st.subheader("📈 策略驗證與回測 (Live Backtest)")
     
-    if st.button("▶️ 執行回測與驗證"):
+    if st.button("▶️ 執行回測與驗證 (含牛熊濾網)"):
         rebalance_dates = df_close.resample('ME').last().index
         equity = [INITIAL_CASH]; cash = INITIAL_CASH; holdings = {}
         history_records = []
@@ -275,52 +260,82 @@ try:
         progress_bar = st.progress(0)
         total_steps = len(bt_df) - start_idx
         
+        # 為了回測時能拿到歷史的 QQQ 200MA，需要對齊索引
+        # 使用 asof 來找最接近的 QQQ 數據 (防止交易日不對齊)
+        
         for i in range(start_idx, len(bt_df)):
             curr_date = bt_df.index[i]
             
+            # 1. 更新淨值
             val = cash
             for t, s in holdings.items():
                 if t in bt_df.columns:
                     price = bt_df[t].iloc[i]
                     if not pd.isna(price): val += s * price
             
+            # 2. 換股日
             if curr_date in rebalance_dates:
                 try:
-                    scores = momentum.iloc[i-1].drop('QQQ', errors='ignore')
-                    scores = scores[scores > 0] 
-                    picks = scores.sort_values(ascending=False).head(TOP_N).index.tolist()
+                    # 【新增邏輯】回測時的牛熊判斷
+                    # 取得當日 QQQ 價格與 200MA
+                    # 注意：我們用前一日 (i-1) 的數據來決定，模擬「收盤確認後，次日執行」或「當日收盤執行」
+                    # 這裡使用 asof 確保拿到數據
+                    hist_qqq_price = df_qqq['Close'].asof(curr_date)
+                    hist_qqq_ma = df_qqq['MA200'].asof(curr_date)
                     
-                    history_records.append({'Date': curr_date.strftime('%Y-%m-%d'), 'Stocks': picks})
+                    is_bull = hist_qqq_price > hist_qqq_ma
                     
+                    picks = [] # 預設為空 (現金)
+                    
+                    if is_bull:
+                        # 牛市：選股
+                        scores = momentum.iloc[i-1].drop('QQQ', errors='ignore')
+                        scores = scores[scores > 0] 
+                        picks = scores.sort_values(ascending=False).head(TOP_N).index.tolist()
+                    else:
+                        # 熊市：不選股 (picks 保持為空)
+                        pass
+                    
+                    # 紀錄 (若 picks 為空，會記錄 Empty / Cash)
+                    history_records.append({
+                        'Date': curr_date.strftime('%Y-%m-%d'), 
+                        'Stocks': picks if picks else ['CASH (Bear Market)']
+                    })
+                    
+                    # 執行換倉 (全賣全買)
                     pool = cash
                     for t, s in holdings.items():
                         pool += s * bt_df[t].iloc[i] * 0.999 
                     
                     cash = 0; holdings = {}
+                    
                     if len(picks) > 0:
                         size = pool / len(picks)
                         for t in picks:
                             holdings[t] = size / bt_df[t].iloc[i]
                         cash = 0
                     else:
+                        # 熊市：持有現金
                         cash = pool 
-                except: pass
+                        
+                except Exception as e:
+                    # print(e)
+                    pass
             
             equity.append(val)
             if i % 50 == 0: progress_bar.progress((i - start_idx) / total_steps)
             
         progress_bar.empty()
         
+        # 繪圖
         bt_dates = bt_df.index[start_idx-1:]
         perf_series = pd.Series(equity, index=bt_dates)
         bench = bt_df['QQQ'][start_idx-1:]
         bench = bench / bench.iloc[0] * INITIAL_CASH
         
-        # 計算獲利 %
         pct_return = (perf_series - INITIAL_CASH) / INITIAL_CASH * 100
         
         fig = go.Figure()
-        
         fig.add_trace(go.Scatter(
             x=perf_series.index, 
             y=perf_series, 
@@ -330,7 +345,6 @@ try:
             customdata=pct_return,
             hovertemplate='<b>Date</b>: %{x}<br><b>Equity</b>: $%{y:,.0f}<br><b>Return</b>: %{customdata:.2f}%<extra></extra>'
         ))
-        
         fig.add_trace(go.Scatter(
             x=bench.index, 
             y=bench, 
@@ -339,7 +353,6 @@ try:
             line=dict(color='gray', dash='dash'),
             hovertemplate='<b>Date</b>: %{x}<br><b>Equity</b>: $%{y:,.0f}<extra></extra>'
         ))
-        
         fig.update_layout(title='資金淨值曲線', template='plotly_dark', height=400, hovermode="x unified")
         st.plotly_chart(fig, use_container_width=True)
         
@@ -350,15 +363,19 @@ try:
             hist_df['Top Picks'] = hist_df['Stocks'].apply(lambda x: ", ".join(x))
             st.dataframe(hist_df[['Date', 'Top Picks']].sort_values('Date', ascending=False), use_container_width=True)
             
+            # 熱圖 (排除 Cash)
             heatmap_data = []
             for rec in history_records:
                 for stock in rec['Stocks']:
-                    heatmap_data.append({'Date': rec['Date'], 'Stock': stock, 'Held': 1})
-            hm_df = pd.DataFrame(heatmap_data)
-            fig_hm = px.scatter(hm_df, x="Date", y="Stock", color="Stock", title="動能輪動軌跡", height=600)
-            fig_hm.update_traces(marker=dict(size=10, symbol='square'))
-            fig_hm.update_layout(showlegend=False, template='plotly_dark')
-            st.plotly_chart(fig_hm, use_container_width=True)
+                    if stock != 'CASH (Bear Market)':
+                        heatmap_data.append({'Date': rec['Date'], 'Stock': stock, 'Held': 1})
+            
+            if heatmap_data:
+                hm_df = pd.DataFrame(heatmap_data)
+                fig_hm = px.scatter(hm_df, x="Date", y="Stock", color="Stock", title="動能輪動軌跡 (空白處即為持有現金)", height=600)
+                fig_hm.update_traces(marker=dict(size=10, symbol='square'))
+                fig_hm.update_layout(showlegend=False, template='plotly_dark')
+                st.plotly_chart(fig_hm, use_container_width=True)
 
 except Exception as e:
     st.error(f"系統發生錯誤: {e}")
