@@ -30,11 +30,14 @@ STATIC_BACKUP = [
 ]
 
 # ==========================================
-# 1. 智能清單獲取函數 (自動更新)
+# 1. 智能清單獲取函數 (回傳清單 + 來源狀態)
 # ==========================================
 @st.cache_data(ttl=86400)
 def get_latest_components():
-    """自動抓取 Nasdaq 100 最新成分股"""
+    """
+    自動抓取 Nasdaq 100 最新成分股
+    Return: (tickers, source_msg, is_live)
+    """
     tickers = []
     try:
         url = "https://en.wikipedia.org/wiki/Nasdaq-100"
@@ -58,28 +61,34 @@ def get_latest_components():
             tickers = target_table[col].tolist()
             tickers = [t.replace('.', '-') for t in tickers]
             if 'QQQ' not in tickers: tickers.append('QQQ')
-            return tickers
+            return tickers, "✅ 資料來源：Wikipedia (即時更新)", True
         else:
-            return STATIC_BACKUP
+            return STATIC_BACKUP, "⚠️ 資料來源：系統內建 (備用清單)", False
 
     except Exception as e:
         print(f"⚠️ 自動更新失敗: {e}，切換至備用清單。")
-        return STATIC_BACKUP
+        return STATIC_BACKUP, f"⚠️ 資料來源：系統內建 (連線錯誤: {str(e)[:20]}...)", False
 
 # ==========================================
-# 2. 獲取數據主函數 (修正回測週期為 5 年)
+# 2. 數據獲取函數 (分開處理 QQQ OHLC 與 成分股 Close)
 # ==========================================
 @st.cache_data(ttl=3600)
-def download_market_data(tickers, lookback_years=5): # <--- 這裡修改為 5
-    """
-    下載過去 N 年的數據 (預設 5 年)
-    """
+def get_qqq_ohlc(lookback_years=5):
+    """專門下載 QQQ 的 OHLC 用於繪圖"""
     start_date = (datetime.now() - timedelta(days=lookback_years*365)).strftime('%Y-%m-%d')
+    df = yf.download("QQQ", start=start_date, progress=False, auto_adjust=True)
     
-    # 下載數據
+    # 計算 200MA
+    df['MA200'] = df['Close'].rolling(window=200).mean()
+    df.index = pd.to_datetime(df.index).tz_localize(None)
+    return df
+
+@st.cache_data(ttl=3600)
+def download_market_data(tickers, lookback_years=5):
+    """下載策略用的收盤價數據"""
+    start_date = (datetime.now() - timedelta(days=lookback_years*365)).strftime('%Y-%m-%d')
     data = yf.download(tickers, start=start_date, interval="1d", progress=False, group_by='ticker', auto_adjust=True)
     
-    # --- 數據清洗核心邏輯 ---
     df_close = pd.DataFrame()
     
     if isinstance(data.columns, pd.MultiIndex):
@@ -108,19 +117,13 @@ def download_market_data(tickers, lookback_years=5): # <--- 這裡修改為 5
 def calculate_metrics(df, lookback_days):
     """計算動能與指標"""
     momentum = df.pct_change(lookback_days)
-    
-    qqq_close = df['QQQ']
-    qqq_ma200 = qqq_close.rolling(window=200).mean()
-    market_trend = qqq_close.iloc[-1] > qqq_ma200.iloc[-1]
-    
-    return momentum, market_trend, qqq_close, qqq_ma200
+    # 這裡只做簡單計算，UI 的詳細判定交給 QQQ OHLC 數據
+    return momentum
 
 # ==========================================
 # 3. 側邊欄與參數
 # ==========================================
 st.sidebar.header("⚙️ 策略參數設定")
-
-# 動能週期預設為 60 天
 LOOKBACK = st.sidebar.slider("動能週期 (天)", 20, 120, 60, step=1, help="60交易日約等於一季")
 TOP_N = st.sidebar.slider("持有檔數 (Top N)", 3, 10, 5)
 INITIAL_CASH = st.sidebar.number_input("初始資金 ($)", 10000, 1000000, 200000)
@@ -129,21 +132,18 @@ st.sidebar.markdown("---")
 st.sidebar.markdown("### 📖 APP 使用指南")
 st.sidebar.info(
     """
-    **1. 🚦 檢查市場狀態 (最上方)**
-    * **牛市 (Bull)**：QQQ 在 200日均線之上，**可積極進場**。
-    * **熊市 (Bear)**：QQQ 跌破 200日均線，建議**清空持股**，轉持有現金或美債 (如 BIL/SHV)。
+    **1. 🚦 檢查市場狀態 (K線圖)**
+    * **牛市**：QQQ K棒在橘色 200MA 線之上。
+    * **熊市**：QQQ K棒跌破 200MA 線。
     
-    **2. 🏆 每月換股 (Top Picks)**
-    * 本策略每月調整一次持倉。
-    * 請參考 **「本月最強 Top 5」** 卡片。
-    * 買入這 5 支股票，並持有到下個月底。
+    **2. 🏆 每月換股**
+    * 參考 **「本月最強 Top 5」**。
+    * 買入持有至下個月底。
     
-    **3. 🔄 汰弱留強**
-    * 下個月底打開此 APP，若名單變動，則賣出舊的、買入新的。
-    * 若市場轉為「熊市」，則無條件賣出所有股票。
+    **3. 🛡️ 風險控管**
+    * 若轉入熊市，建議清空持股。
     """
 )
-st.sidebar.caption(f"系統每日自動從 Wiki 更新成分股清單")
 
 # ==========================================
 # 4. 主畫面邏輯
@@ -151,34 +151,75 @@ st.sidebar.caption(f"系統每日自動從 Wiki 更新成分股清單")
 st.title("🚀 Nasdaq 100 動能輪動戰情室")
 
 try:
-    # 1. 先獲取清單
-    current_tickers = get_latest_components()
+    # 1. 獲取清單與來源狀態
+    current_tickers, source_msg, is_live = get_latest_components()
     
-    # 2. 顯示載入動畫 (這裡會呼叫 download_market_data，預設下載 5 年)
-    with st.spinner(f'正在下載 {len(current_tickers)} 支成分股數據 (近5年)...'):
-        df = download_market_data(current_tickers)
+    # 2. 數據下載
+    with st.spinner(f'正在下載數據 (近5年)...'):
+        # 平行下載 QQQ 詳細數據與全市場收盤價
+        df_qqq = get_qqq_ohlc() 
+        df_close = download_market_data(current_tickers)
         
-    # 3. 顯示成功訊息
     st.toast(f'已載入 {len(current_tickers)} 支最新成分股', icon="✅")
 
-    momentum, is_bull_market, qqq, ma200 = calculate_metrics(df, LOOKBACK)
+    # 3. 計算動能
+    momentum = calculate_metrics(df_close, LOOKBACK)
     
-    # --- A. 市場紅綠燈 ---
+    # 4. 判斷牛熊 (使用最新的 QQQ OHLC 數據)
+    curr_qqq_price = df_qqq['Close'].iloc[-1]
+    curr_ma200 = df_qqq['MA200'].iloc[-1]
+    is_bull_market = curr_qqq_price > curr_ma200
+
+    # --- A. QQQ K線圖與市場狀態 ---
+    st.subheader("🚦 市場趨勢判讀 (QQQ vs 200MA)")
+    
+    # 顯示清單來源 (在適當位置註記)
+    if is_live:
+        st.caption(source_msg)
+    else:
+        st.warning(source_msg)
+
+    # 繪製 K 線圖
+    fig_qqq = go.Figure()
+
+    # K線
+    fig_qqq.add_trace(go.Candlestick(
+        x=df_qqq.index,
+        open=df_qqq['Open'],
+        high=df_qqq['High'],
+        low=df_qqq['Low'],
+        close=df_qqq['Close'],
+        name='QQQ Price'
+    ))
+
+    # 200MA
+    fig_qqq.add_trace(go.Scatter(
+        x=df_qqq.index, 
+        y=df_qqq['MA200'], 
+        mode='lines', 
+        name='200 MA',
+        line=dict(color='orange', width=2)
+    ))
+
+    # 布局設定
+    fig_qqq.update_layout(
+        title=f'QQQ 趨勢圖 (目前狀態: {"🐂 牛市" if is_bull_market else "🐻 熊市"})',
+        yaxis_title='Price',
+        template='plotly_dark',
+        xaxis_rangeslider_visible=False, # 隱藏下方滑桿以節省空間
+        height=500
+    )
+    st.plotly_chart(fig_qqq, use_container_width=True)
+
+    # 指標顯示
     col1, col2, col3 = st.columns(3)
-    current_qqq = qqq.iloc[-1]
-    current_ma = ma200.iloc[-1]
-    
     with col1:
-        st.metric("QQQ 現價", f"${current_qqq:.2f}", f"{(current_qqq/qqq.iloc[-2]-1)*100:.2f}%")
-    
+        st.metric("QQQ 現價", f"${curr_qqq:.2f}", f"{(curr_qqq/df_qqq['Close'].iloc[-2]-1)*100:.2f}%")
     with col2:
-        ma_delta = current_qqq - current_ma
-        status_text = "🐂 牛市" if is_bull_market else "🐻 熊市"
-        delta_color = "normal" if is_bull_market else "inverse"
-        st.metric("市場狀態 (vs 200MA)", status_text, f"{ma_delta:.2f} 點", delta_color=delta_color)
-        
+        dist_ma = (curr_qqq - curr_ma200) / curr_ma200 * 100
+        st.metric("乖離率 (距200MA)", f"{dist_ma:.2f}%", delta_color="normal" if is_bull_market else "inverse")
     with col3:
-        last_rebalance = df.resample('ME').last().index[-1]
+        last_rebalance = df_close.resample('ME').last().index[-1]
         st.metric("最近一次換股日", last_rebalance.strftime('%Y-%m-%d'))
 
     st.divider()
@@ -189,19 +230,16 @@ try:
     if not is_bull_market:
         st.error("🛑 **目前處於熊市保護模式 (QQQ < 200MA)！**\n\n策略建議：**100% 持有現金** 或 **短債ETF (BIL)**，暫停買入任何股票。")
     
-    # 確保只取最新的數據，且去除 QQQ
     latest_mom = momentum.iloc[-1].drop('QQQ', errors='ignore')
     latest_mom = latest_mom.sort_values(ascending=False)
-    
-    # 簡單濾網：只顯示正報酬
-    latest_mom = latest_mom[latest_mom > -100] 
+    latest_mom = latest_mom[latest_mom > -100] # 濾網
     
     top_picks = latest_mom.head(TOP_N)
     
     cols = st.columns(TOP_N)
     for i, (ticker, mom_val) in enumerate(top_picks.items()):
-        if ticker in df.columns:
-            current_price = df[ticker].iloc[-1]
+        if ticker in df_close.columns:
+            current_price = df_close[ticker].iloc[-1]
             with cols[i]:
                 st.success(f"#{i+1} {ticker}")
                 st.metric("現價", f"${current_price:.2f}")
@@ -210,7 +248,7 @@ try:
     with st.expander("查看完整排名列表 (Top 20)"):
         top_20_tickers = latest_mom.head(20).index
         top_20_df = pd.DataFrame({
-            'Price': df[top_20_tickers].iloc[-1],
+            'Price': df_close[top_20_tickers].iloc[-1],
             'Momentum': latest_mom.head(20)
         })
         top_20_df['Momentum %'] = (top_20_df['Momentum'] * 100).map('{:.2f}%'.format)
@@ -222,12 +260,11 @@ try:
     st.subheader("📈 策略驗證與回測 (Live Backtest)")
     
     if st.button("▶️ 執行回測與驗證"):
-        # 回測引擎
-        rebalance_dates = df.resample('ME').last().index
+        rebalance_dates = df_close.resample('ME').last().index
         equity = [INITIAL_CASH]; cash = INITIAL_CASH; holdings = {}
         history_records = []
         
-        bt_df = df.copy()
+        bt_df = df_close.copy()
         start_idx = bt_df.index.searchsorted(rebalance_dates[0])
         if start_idx < LOOKBACK: start_idx = LOOKBACK
         
@@ -275,10 +312,33 @@ try:
         bench = bt_df['QQQ'][start_idx-1:]
         bench = bench / bench.iloc[0] * INITIAL_CASH
         
+        # 計算獲利 % (用於 Hover 顯示)
+        pct_return = (perf_series - INITIAL_CASH) / INITIAL_CASH * 100
+        
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=perf_series.index, y=perf_series, mode='lines', name='Momentum Strategy', line=dict(color='#00E676', width=2)))
-        fig.add_trace(go.Scatter(x=bench.index, y=bench, mode='lines', name='QQQ Benchmark', line=dict(color='gray', dash='dash')))
-        fig.update_layout(title='資金淨值曲線', template='plotly_dark', height=400)
+        
+        # 策略曲線 (加入 Hover 獲利 %)
+        fig.add_trace(go.Scatter(
+            x=perf_series.index, 
+            y=perf_series, 
+            mode='lines', 
+            name='Momentum Strategy', 
+            line=dict(color='#00E676', width=2),
+            customdata=pct_return, # 綁定獲利數據
+            hovertemplate='<b>Date</b>: %{x}<br><b>Equity</b>: $%{y:,.0f}<br><b>Return</b>: %{customdata:.2f}%<extra></extra>'
+        ))
+        
+        # 基準曲線
+        fig.add_trace(go.Scatter(
+            x=bench.index, 
+            y=bench, 
+            mode='lines', 
+            name='QQQ Benchmark', 
+            line=dict(color='gray', dash='dash'),
+            hovertemplate='<b>Date</b>: %{x}<br><b>Equity</b>: $%{y:,.0f}<extra></extra>'
+        ))
+        
+        fig.update_layout(title='資金淨值曲線', template='plotly_dark', height=400, hovermode="x unified")
         st.plotly_chart(fig, use_container_width=True)
         
         st.success(f"策略總報酬: {(equity[-1]/INITIAL_CASH - 1)*100:.2f}%")
