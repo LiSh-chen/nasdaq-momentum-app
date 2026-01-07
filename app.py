@@ -30,13 +30,12 @@ STATIC_BACKUP = [
 ]
 
 # ==========================================
-# 1. 智能清單獲取函數 (回傳清單 + 來源狀態)
+# 1. 智能清單獲取函數
 # ==========================================
 @st.cache_data(ttl=86400)
 def get_latest_components():
     """
     自動抓取 Nasdaq 100 最新成分股
-    Return: (tickers, source_msg, is_live)
     """
     tickers = []
     try:
@@ -70,14 +69,23 @@ def get_latest_components():
         return STATIC_BACKUP, f"⚠️ 資料來源：系統內建 (連線錯誤: {str(e)[:20]}...)", False
 
 # ==========================================
-# 2. 數據獲取函數 (分開處理 QQQ OHLC 與 成分股 Close)
+# 2. 數據獲取函數 (修復資料格式錯誤)
 # ==========================================
 @st.cache_data(ttl=3600)
 def get_qqq_ohlc(lookback_years=5):
-    """專門下載 QQQ 的 OHLC 用於繪圖"""
+    """專門下載 QQQ 的 OHLC 用於繪圖 (含格式修復)"""
     start_date = (datetime.now() - timedelta(days=lookback_years*365)).strftime('%Y-%m-%d')
     df = yf.download("QQQ", start=start_date, progress=False, auto_adjust=True)
     
+    # 【關鍵修復】: 如果 yfinance 回傳多層索引 (Price, Ticker)，強制壓平
+    if isinstance(df.columns, pd.MultiIndex):
+        try:
+            # 嘗試提取 QQQ 層級
+            df = df.xs('QQQ', level=1, axis=1)
+        except:
+            # 如果失敗，直接丟棄層級 (假設只有一支股票)
+            df.columns = df.columns.droplevel(1)
+            
     # 計算 200MA
     df['MA200'] = df['Close'].rolling(window=200).mean()
     df.index = pd.to_datetime(df.index).tz_localize(None)
@@ -115,9 +123,8 @@ def download_market_data(tickers, lookback_years=5):
     return df_close
 
 def calculate_metrics(df, lookback_days):
-    """計算動能與指標"""
+    """計算動能"""
     momentum = df.pct_change(lookback_days)
-    # 這裡只做簡單計算，UI 的詳細判定交給 QQQ OHLC 數據
     return momentum
 
 # ==========================================
@@ -156,7 +163,7 @@ try:
     
     # 2. 數據下載
     with st.spinner(f'正在下載數據 (近5年)...'):
-        # 平行下載 QQQ 詳細數據與全市場收盤價
+        # 平行下載
         df_qqq = get_qqq_ohlc() 
         df_close = download_market_data(current_tickers)
         
@@ -165,15 +172,15 @@ try:
     # 3. 計算動能
     momentum = calculate_metrics(df_close, LOOKBACK)
     
-    # 4. 判斷牛熊 (使用最新的 QQQ OHLC 數據)
-    curr_qqq_price = df_qqq['Close'].iloc[-1]
-    curr_ma200 = df_qqq['MA200'].iloc[-1]
+    # 4. 判斷牛熊 (修正：確保轉為純數字)
+    # 使用 float() 強制轉換，避免 Series Ambiguous 錯誤
+    curr_qqq_price = float(df_qqq['Close'].iloc[-1])
+    curr_ma200 = float(df_qqq['MA200'].iloc[-1])
     is_bull_market = curr_qqq_price > curr_ma200
 
     # --- A. QQQ K線圖與市場狀態 ---
     st.subheader("🚦 市場趨勢判讀 (QQQ vs 200MA)")
     
-    # 顯示清單來源 (在適當位置註記)
     if is_live:
         st.caption(source_msg)
     else:
@@ -182,7 +189,6 @@ try:
     # 繪製 K 線圖
     fig_qqq = go.Figure()
 
-    # K線
     fig_qqq.add_trace(go.Candlestick(
         x=df_qqq.index,
         open=df_qqq['Open'],
@@ -192,7 +198,6 @@ try:
         name='QQQ Price'
     ))
 
-    # 200MA
     fig_qqq.add_trace(go.Scatter(
         x=df_qqq.index, 
         y=df_qqq['MA200'], 
@@ -201,22 +206,21 @@ try:
         line=dict(color='orange', width=2)
     ))
 
-    # 布局設定
     fig_qqq.update_layout(
         title=f'QQQ 趨勢圖 (目前狀態: {"🐂 牛市" if is_bull_market else "🐻 熊市"})',
         yaxis_title='Price',
         template='plotly_dark',
-        xaxis_rangeslider_visible=False, # 隱藏下方滑桿以節省空間
+        xaxis_rangeslider_visible=False,
         height=500
     )
     st.plotly_chart(fig_qqq, use_container_width=True)
 
-    # 指標顯示
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.metric("QQQ 現價", f"${curr_qqq:.2f}", f"{(curr_qqq/df_qqq['Close'].iloc[-2]-1)*100:.2f}%")
+        prev_price = float(df_qqq['Close'].iloc[-2])
+        st.metric("QQQ 現價", f"${curr_qqq_price:.2f}", f"{(curr_qqq_price/prev_price-1)*100:.2f}%")
     with col2:
-        dist_ma = (curr_qqq - curr_ma200) / curr_ma200 * 100
+        dist_ma = (curr_qqq_price - curr_ma200) / curr_ma200 * 100
         st.metric("乖離率 (距200MA)", f"{dist_ma:.2f}%", delta_color="normal" if is_bull_market else "inverse")
     with col3:
         last_rebalance = df_close.resample('ME').last().index[-1]
@@ -232,7 +236,7 @@ try:
     
     latest_mom = momentum.iloc[-1].drop('QQQ', errors='ignore')
     latest_mom = latest_mom.sort_values(ascending=False)
-    latest_mom = latest_mom[latest_mom > -100] # 濾網
+    latest_mom = latest_mom[latest_mom > -100] 
     
     top_picks = latest_mom.head(TOP_N)
     
@@ -312,23 +316,21 @@ try:
         bench = bt_df['QQQ'][start_idx-1:]
         bench = bench / bench.iloc[0] * INITIAL_CASH
         
-        # 計算獲利 % (用於 Hover 顯示)
+        # 計算獲利 %
         pct_return = (perf_series - INITIAL_CASH) / INITIAL_CASH * 100
         
         fig = go.Figure()
         
-        # 策略曲線 (加入 Hover 獲利 %)
         fig.add_trace(go.Scatter(
             x=perf_series.index, 
             y=perf_series, 
             mode='lines', 
             name='Momentum Strategy', 
             line=dict(color='#00E676', width=2),
-            customdata=pct_return, # 綁定獲利數據
+            customdata=pct_return,
             hovertemplate='<b>Date</b>: %{x}<br><b>Equity</b>: $%{y:,.0f}<br><b>Return</b>: %{customdata:.2f}%<extra></extra>'
         ))
         
-        # 基準曲線
         fig.add_trace(go.Scatter(
             x=bench.index, 
             y=bench, 
