@@ -67,13 +67,12 @@ def get_latest_components():
         return STATIC_BACKUP
 
 # ==========================================
-# 2. 獲取數據主函數 (修正快取衝突)
+# 2. 獲取數據主函數 (修正回測週期為 5 年)
 # ==========================================
 @st.cache_data(ttl=3600)
-def download_market_data(tickers, lookback_years=3):
+def download_market_data(tickers, lookback_years=5): # <--- 這裡修改為 5
     """
-    純粹的數據下載與清洗邏輯
-    注意：這裡不能放 st.spinner 或 st.toast
+    下載過去 N 年的數據 (預設 5 年)
     """
     start_date = (datetime.now() - timedelta(days=lookback_years*365)).strftime('%Y-%m-%d')
     
@@ -117,11 +116,11 @@ def calculate_metrics(df, lookback_days):
     return momentum, market_trend, qqq_close, qqq_ma200
 
 # ==========================================
-# 3. 側邊欄與參數 (更新使用說明)
+# 3. 側邊欄與參數
 # ==========================================
 st.sidebar.header("⚙️ 策略參數設定")
 
-# 修正：預設值改為 60
+# 動能週期預設為 60 天
 LOOKBACK = st.sidebar.slider("動能週期 (天)", 20, 120, 60, step=1, help="60交易日約等於一季")
 TOP_N = st.sidebar.slider("持有檔數 (Top N)", 3, 10, 5)
 INITIAL_CASH = st.sidebar.number_input("初始資金 ($)", 10000, 1000000, 200000)
@@ -147,7 +146,7 @@ st.sidebar.info(
 st.sidebar.caption(f"系統每日自動從 Wiki 更新成分股清單")
 
 # ==========================================
-# 4. 主畫面邏輯 (UI 邏輯移到這裡)
+# 4. 主畫面邏輯
 # ==========================================
 st.title("🚀 Nasdaq 100 動能輪動戰情室")
 
@@ -155,11 +154,11 @@ try:
     # 1. 先獲取清單
     current_tickers = get_latest_components()
     
-    # 2. 顯示載入動畫 (移到 cache 函數外面)
-    with st.spinner(f'正在下載 {len(current_tickers)} 支成分股數據...'):
+    # 2. 顯示載入動畫 (這裡會呼叫 download_market_data，預設下載 5 年)
+    with st.spinner(f'正在下載 {len(current_tickers)} 支成分股數據 (近5年)...'):
         df = download_market_data(current_tickers)
         
-    # 3. 顯示成功訊息 (移到 cache 函數外面)
+    # 3. 顯示成功訊息
     st.toast(f'已載入 {len(current_tickers)} 支最新成分股', icon="✅")
 
     momentum, is_bull_market, qqq, ma200 = calculate_metrics(df, LOOKBACK)
