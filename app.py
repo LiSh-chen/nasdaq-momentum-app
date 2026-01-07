@@ -26,7 +26,7 @@ STATIC_BACKUP = [
     'MRVL', 'MSFT', 'MU', 'NFLX', 'NVDA', 'NXPI', 'ODFL', 'ON', 'ORLY', 'PANW', 'PAYX', 'PCAR', 'PDD',
     'PEP', 'PYPL', 'QCOM', 'REGN', 'ROP', 'ROST', 'SBUX', 'SIRI', 'SNPS', 'TEAM', 'TMUS', 'TSLA', 'TTD',
     'TXN', 'VRSK', 'VRTX', 'WBA', 'WBD', 'WDAY', 'XEL', 'ZS', 'QQQ', 
-    'WDC', 'STX', 'ARM', 'SMCI' # 強制補入強勢股
+    'WDC', 'STX', 'ARM', 'SMCI'
 ]
 
 # ==========================================
@@ -42,7 +42,6 @@ def get_latest_components():
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
         
-        # 設定 timeout 防止卡死
         r = requests.get(url, headers=headers, timeout=5)
         r.raise_for_status()
         
@@ -68,60 +67,47 @@ def get_latest_components():
         return STATIC_BACKUP
 
 # ==========================================
-# 2. 獲取數據主函數 (含數據清洗)
+# 2. 獲取數據主函數 (修正快取衝突)
 # ==========================================
 @st.cache_data(ttl=3600)
-def get_data(lookback_years=3):
-    """下載數據並清洗格式"""
-    current_tickers = get_latest_components()
+def download_market_data(tickers, lookback_years=3):
+    """
+    純粹的數據下載與清洗邏輯
+    注意：這裡不能放 st.spinner 或 st.toast
+    """
     start_date = (datetime.now() - timedelta(days=lookback_years*365)).strftime('%Y-%m-%d')
     
-    st.toast(f'已載入 {len(current_tickers)} 支成分股', icon="✅")
-    
     # 下載數據
-    # group_by='ticker' 會讓格式變成 (Ticker, Price)
-    # auto_adjust=True 自動處理除權息
-    with st.spinner('正在下載數據...'):
-        data = yf.download(current_tickers, start=start_date, interval="1d", progress=False, group_by='ticker', auto_adjust=True)
+    data = yf.download(tickers, start=start_date, interval="1d", progress=False, group_by='ticker', auto_adjust=True)
     
     # --- 數據清洗核心邏輯 ---
     df_close = pd.DataFrame()
     
-    # 處理 yfinance 的多層索引 (MultiIndex)
     if isinstance(data.columns, pd.MultiIndex):
-        # 嘗試只提取 Close 欄位
         try:
-            # 情況 A: 欄位是 (Ticker, Price) -> 這是一般情況
-            # xs 可以切片取出所有 Ticker 的 'Close'
             df_close = data.xs('Close', level=1, axis=1)
         except KeyError:
             try:
-                # 情況 B: 欄位是 (Price, Ticker) -> 某些版本會這樣
                 df_close = data.xs('Close', level=0, axis=1)
             except KeyError:
-                # 情況 C: 土法煉鋼，遍歷每個 Ticker
-                for t in current_tickers:
+                for t in tickers:
                     if t in data.columns:
                         df_close[t] = data[t]['Close']
     else:
-        # 單層索引 (通常只有一支股票時發生，或是 columns 已經被平展)
         if 'Close' in data.columns:
             df_close = data['Close']
         else:
-            # 嘗試直接用 tickers 讀取
-            for t in current_tickers:
+            for t in tickers:
                  if t in data.columns:
                      df_close[t] = data[t]
 
-    # 清理數據
     df_close = df_close.fillna(method='ffill').dropna(how='all')
     df_close.index = pd.to_datetime(df_close.index).tz_localize(None)
     
     return df_close
 
-def calculate_metrics(df, lookback_days=63):
+def calculate_metrics(df, lookback_days):
     """計算動能與指標"""
-    # 這裡的 df 已經保證只有 Close Price，且 Columns 是 Ticker
     momentum = df.pct_change(lookback_days)
     
     qqq_close = df['QQQ']
@@ -131,22 +117,51 @@ def calculate_metrics(df, lookback_days=63):
     return momentum, market_trend, qqq_close, qqq_ma200
 
 # ==========================================
-# 3. 側邊欄與參數
+# 3. 側邊欄與參數 (更新使用說明)
 # ==========================================
 st.sidebar.header("⚙️ 策略參數設定")
-LOOKBACK = st.sidebar.slider("動能週期 (天)", 20, 120, 63, step=1, help="63天約等於一季")
+
+# 修正：預設值改為 60
+LOOKBACK = st.sidebar.slider("動能週期 (天)", 20, 120, 60, step=1, help="60交易日約等於一季")
 TOP_N = st.sidebar.slider("持有檔數 (Top N)", 3, 10, 5)
 INITIAL_CASH = st.sidebar.number_input("初始資金 ($)", 10000, 1000000, 200000)
 
-st.sidebar.info("💡 **自動更新：** 系統會每日嘗試從 Wiki 抓取最新成分股。")
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 📖 APP 使用指南")
+st.sidebar.info(
+    """
+    **1. 🚦 檢查市場狀態 (最上方)**
+    * **牛市 (Bull)**：QQQ 在 200日均線之上，**可積極進場**。
+    * **熊市 (Bear)**：QQQ 跌破 200日均線，建議**清空持股**，轉持有現金或美債 (如 BIL/SHV)。
+    
+    **2. 🏆 每月換股 (Top Picks)**
+    * 本策略每月調整一次持倉。
+    * 請參考 **「本月最強 Top 5」** 卡片。
+    * 買入這 5 支股票，並持有到下個月底。
+    
+    **3. 🔄 汰弱留強**
+    * 下個月底打開此 APP，若名單變動，則賣出舊的、買入新的。
+    * 若市場轉為「熊市」，則無條件賣出所有股票。
+    """
+)
+st.sidebar.caption(f"系統每日自動從 Wiki 更新成分股清單")
 
 # ==========================================
-# 4. 主畫面邏輯
+# 4. 主畫面邏輯 (UI 邏輯移到這裡)
 # ==========================================
 st.title("🚀 Nasdaq 100 動能輪動戰情室")
 
 try:
-    df = get_data()
+    # 1. 先獲取清單
+    current_tickers = get_latest_components()
+    
+    # 2. 顯示載入動畫 (移到 cache 函數外面)
+    with st.spinner(f'正在下載 {len(current_tickers)} 支成分股數據...'):
+        df = download_market_data(current_tickers)
+        
+    # 3. 顯示成功訊息 (移到 cache 函數外面)
+    st.toast(f'已載入 {len(current_tickers)} 支最新成分股', icon="✅")
+
     momentum, is_bull_market, qqq, ma200 = calculate_metrics(df, LOOKBACK)
     
     # --- A. 市場紅綠燈 ---
@@ -173,7 +188,7 @@ try:
     st.subheader(f"🏆 本月最強 Top {TOP_N} (即時運算)")
     
     if not is_bull_market:
-        st.warning("⚠️ **目前處於熊市保護模式 (QQQ < 200MA)，建議持有現金或債券。**")
+        st.error("🛑 **目前處於熊市保護模式 (QQQ < 200MA)！**\n\n策略建議：**100% 持有現金** 或 **短債ETF (BIL)**，暫停買入任何股票。")
     
     # 確保只取最新的數據，且去除 QQQ
     latest_mom = momentum.iloc[-1].drop('QQQ', errors='ignore')
@@ -186,7 +201,6 @@ try:
     
     cols = st.columns(TOP_N)
     for i, (ticker, mom_val) in enumerate(top_picks.items()):
-        # 防呆：確保 ticker 在 df 中
         if ticker in df.columns:
             current_price = df[ticker].iloc[-1]
             with cols[i]:
@@ -195,7 +209,6 @@ try:
                 st.metric(f"{LOOKBACK}天漲幅", f"{mom_val*100:.1f}%")
             
     with st.expander("查看完整排名列表 (Top 20)"):
-        # 建立詳細表格
         top_20_tickers = latest_mom.head(20).index
         top_20_df = pd.DataFrame({
             'Price': df[top_20_tickers].iloc[-1],
