@@ -25,3 +25,9 @@ npx expo run:android   # 或 npx expo run:ios（需 macOS + Xcode）
 - 不儲存帳號密碼，只保留網站發給瀏覽器的登入狀態。
 - 手機上所有網站共用同一個 cookie 儲存區（以網域區分），不像桌面版是完全獨立分區。
 - 請遵守各平台服務條款，僅供個人學習。
+
+## 測試
+
+```bash
+npm test   # Jest 元件測試（WebView 與 CookieManager 以 mock 取代）
+```
