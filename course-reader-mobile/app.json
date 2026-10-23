@@ -5,7 +5,16 @@
     "version": "0.1.0",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
-    "ios": { "bundleIdentifier": "com.example.coursereader", "supportsTablet": true },
-    "android": { "package": "com.example.coursereader" }
+    "ios": {
+      "bundleIdentifier": "com.example.coursereader",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.example.coursereader"
+    },
+    "splash": {
+      "backgroundColor": "#111827",
+      "resizeMode": "contain"
+    }
   }
 }
