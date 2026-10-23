@@ -1,0 +1,14 @@
+{
+  "name": "course-reader",
+  "version": "0.1.0",
+  "description": "在 App 內閱讀各大專院校與機構的免費線上課程，並記住各站登入",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0"
+  }
+}

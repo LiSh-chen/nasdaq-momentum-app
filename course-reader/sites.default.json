@@ -1,0 +1,13 @@
+[
+  { "id": "ntu-ocw", "name": "臺大開放式課程", "url": "https://ocw.aca.ntu.edu.tw/" },
+  { "id": "nycu-ocw", "name": "陽明交大 OCW", "url": "https://ocw.nycu.edu.tw/" },
+  { "id": "ewant", "name": "育網開放教育 ewant", "url": "https://www.ewant.org/" },
+  { "id": "sharecourse", "name": "ShareCourse 學聯網", "url": "https://sharecourse.net/" },
+  { "id": "junyiacademy", "name": "均一教育平台", "url": "https://www.junyiacademy.org/" },
+  { "id": "mit-ocw", "name": "MIT OpenCourseWare", "url": "https://ocw.mit.edu/" },
+  { "id": "edx", "name": "edX", "url": "https://www.edx.org/" },
+  { "id": "coursera", "name": "Coursera", "url": "https://www.coursera.org/" },
+  { "id": "khan", "name": "Khan Academy", "url": "https://www.khanacademy.org/" },
+  { "id": "open-yale", "name": "Open Yale Courses", "url": "https://oyc.yale.edu/" },
+  { "id": "stanford-online", "name": "Stanford Online", "url": "https://online.stanford.edu/" }
+]
