@@ -9,6 +9,7 @@ jobs:
     steps:
       - name: probe (plain requests, honest user agent; challenge pages are reported, not bypassed)
         run: |
+          set +e
           UA="Mozilla/5.0 (compatible; course-reader-probe/1.0)"
           g(){ curl -sL -m 25 -A "$UA" -w "\n[HTTP %{http_code} %{content_type} size=%{size_download}]\n" "$1"; }
           show(){ echo; echo "=================== $1"; g "$1" > /tmp/out.txt; head -c ${2:-700} /tmp/out.txt | tr -s '\n ' ; echo; tail -n 1 /tmp/out.txt; grep -qiE "just a moment|attention required|cf-chl|captcha" /tmp/out.txt && echo "!! CHALLENGE PAGE"; }

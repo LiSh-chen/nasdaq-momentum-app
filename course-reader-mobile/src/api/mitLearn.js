@@ -1,3 +1,5 @@
+import { stripHtml } from '../text';
+
 // MIT Learn 公開 API：彙整 MIT OpenCourseWare、MITx 等來源的課程目錄，不需金鑰
 const BASE = 'https://api.learn.mit.edu/api/v1';
 export const PAGE_SIZE = 20;
@@ -17,7 +19,6 @@ export const LEVEL_NAMES = {
   noncredit: '非學分',
 };
 
-const stripHtml = (s) => String(s ?? '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 
 export function buildSearchUrl({ q, offeredBy, level, topic, hasVideos, sort, offset = 0, limit = PAGE_SIZE } = {}) {
   const p = new URLSearchParams();

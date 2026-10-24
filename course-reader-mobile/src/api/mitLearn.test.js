@@ -68,3 +68,8 @@ test('searchCourses 回傳課程、總數與篩選統計', async () => {
 test('searchCourses 在 API 失敗時丟出錯誤', async () => {
   await expect(searchCourses({}, jest.fn().mockResolvedValue({ ok: false, status: 500 }))).rejects.toThrow('500');
 });
+
+test('normalizeCourse 的說明文字會解碼 &nbsp; 等實體', () => {
+  const c = normalizeCourse({ id: 1, title: 'T', url: 'https://x', description: '<p>offers links to the class&#39;s&nbsp;Solidworks, Creo,&nbsp;and NX</p>' });
+  expect(c.description).toBe("offers links to the class's Solidworks, Creo, and NX");
+});

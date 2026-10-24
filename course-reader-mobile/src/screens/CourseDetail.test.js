@@ -54,7 +54,7 @@ test('沒有章節目錄時退回課程首頁並顯示說明', async () => {
 test('章節載入失敗時仍可從課程首頁閱讀', async () => {
   fetchOutline.mockRejectedValue(new Error('net'));
   const { findByText } = render(<CourseDetail course={course()} onRead={() => {}} />);
-  expect(await findByText('章節載入失敗，仍可從課程首頁開始閱讀。')).toBeTruthy();
+  expect(await findByText('章節載入失敗，仍可從課程首頁開始學習。')).toBeTruthy();
 });
 
 test('其他來源（如需登入的 MITx）也走同一個流程：以課程首頁開始，不抓章節目錄', async () => {
@@ -81,4 +81,51 @@ test('收藏會寫入儲存並切換狀態', async () => {
   fireEvent.press(await findByText('☆ 收藏'));
   await waitFor(() => expect(getByText('★ 已收藏')).toBeTruthy());
   expect(Object.keys(JSON.parse(await AsyncStorage.getItem('favorites')))).toEqual(['7']);
+});
+
+describe('精簡版面', () => {
+  const many = Array.from({ length: 9 }, (_, i) => ({ key: `s${i}`, title: `Chapter ${i + 1}`, url: `https://ocw.mit.edu/c/${i}/`, items: [] }));
+  const long = '這是一段很長的課程說明。'.repeat(30);
+
+  test('章節超過 4 章時預設收合，可展開全部再收合', async () => {
+    fetchOutline.mockResolvedValue(many);
+    const { findByText, queryByText, getByText } = render(<CourseDetail course={course()} onRead={() => {}} />);
+    expect(await findByText('Chapter 4')).toBeTruthy();
+    expect(queryByText('Chapter 5')).toBeNull();
+    expect(getByText('9 章')).toBeTruthy();
+    fireEvent.press(getByText('顯示全部 9 章 ▾'));
+    expect(getByText('Chapter 9')).toBeTruthy();
+    fireEvent.press(getByText('收合 ▴'));
+    expect(queryByText('Chapter 9')).toBeNull();
+  });
+
+  test('長說明預設只顯示 4 行，可展開；短說明不顯示展開鈕', async () => {
+    fetchOutline.mockResolvedValue(outline);
+    const a = render(<CourseDetail course={course({ description: long })} onRead={() => {}} />);
+    await a.findByText('開始學習');
+    expect(a.getByText(long).props.numberOfLines).toBe(4);
+    fireEvent.press(a.getByText('展開 ▾'));
+    expect(a.getByText(long).props.numberOfLines).toBeUndefined();
+    a.unmount();
+    const b = render(<CourseDetail course={course({ description: '力學入門' })} onRead={() => {}} />);
+    await b.findByText('開始學習');
+    expect(b.queryByText('展開 ▾')).toBeNull();
+  });
+
+  test('程度與主題以標籤顯示，章節列不再標示「單頁」', async () => {
+    fetchOutline.mockResolvedValue(outline);
+    const { findByText, getByText, queryByText } = render(<CourseDetail course={course()} onRead={() => {}} />);
+    await findByText('開始學習');
+    expect(getByText('Undergraduate')).toBeTruthy();
+    expect(getByText('Physics')).toBeTruthy();
+    expect(queryByText('單頁')).toBeNull();
+  });
+
+  test('點章節從該章開始學習', async () => {
+    fetchOutline.mockResolvedValue(many);
+    const onRead = jest.fn();
+    const { findByText } = render(<CourseDetail course={course()} onRead={onRead} />);
+    fireEvent.press(await findByText('Chapter 3'));
+    expect(onRead.mock.calls[0][2]).toBe(2);
+  });
 });
