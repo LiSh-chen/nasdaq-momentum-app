@@ -10,24 +10,33 @@ jobs:
         run: |
           B=https://api.learn.mit.edu/api/v1
           g(){ curl -sL -m 30 -A "Mozilla/5.0" "$1"; }
-          echo "##### course result: selected fields"
-          g "$B/courses/?offered_by=ocw&q=classical+mechanics&limit=2" | jq -c '.results[] | {id,readable_id,title,url,resource_type,free,image:.image.url,topics:[.topics[].name],level:[.runs[0].level[]?.name],dept:[.departments[].name],feat:.course_feature,inst:[.runs[0].instructors[]?.full_name],children:(.children|length),keys:keys}'
-          echo "##### aggregations (facets)"
-          g "$B/learning_resources/?resource_type=course&aggregations=offered_by&aggregations=topic&aggregations=level&aggregations=department&aggregations=course_feature&aggregations=free&limit=1" | jq -c '.metadata.aggregations // .metadata | with_entries(.value |= (if type=="array" then .[0:8] else . end))' | head -c 3500
-          echo; echo "##### all offerers/platforms"
-          g "$B/learning_resources/?resource_type=course&aggregations=platform&limit=1" | jq -c '.metadata.aggregations.platform[0:20]'
-          echo "##### video resource"
-          g "$B/learning_resources/?offered_by=ocw&resource_type=video&limit=1" | jq -c '.results[0] | {id,readable_id,title,url,duration:.video,playlist:.playlist,keys:keys, runs:(.runs|length)}'
-          echo "##### items of a course (id from search)"
-          CID=$(g "$B/courses/?offered_by=ocw&q=classical+mechanics&limit=1" | jq '.results[0].id')
-          echo "course id=$CID"
-          for p in "learning_resources/$CID/items/?limit=3" "courses/$CID/items/?limit=3" "contentfiles/?learning_resource_id=$CID&limit=2"; do echo "--- $p"; g "$B/$p" | head -c 1800; echo; done
-          echo "##### OCW page structure: video + resources"
+          echo "##### search endpoint with facets"
+          g "$B/learning_resources_search/?q=physics&resource_type=course&offered_by=ocw&aggregations=topic&aggregations=level&aggregations=department&aggregations=offered_by&limit=1" | jq -c '{count, meta_keys:(.metadata|keys), agg:(.metadata.aggregations|with_entries(.value|=.[0:6]))}' | head -c 3000
+          echo; echo "##### filter params: counts"
+          for q in "resource_type=course&offered_by=ocw" "resource_type=course&offered_by=ocw&level=undergraduate" "resource_type=course&offered_by=ocw&topic=Physics" "resource_type=course&offered_by=ocw&department=8" "resource_type=course&offered_by=ocw&free=true" "resource_type=course&offered_by=ocw&sortby=-views" "resource_type=course&offered_by=ocw&course_feature=Lecture%20Videos"; do echo "$q -> $(g "$B/learning_resources_search/?$q&limit=1" | jq -c '{count,first:.results[0].title}')"; done
+          echo "##### offered_by values"; g "$B/learning_resources_search/?resource_type=course&aggregations=offered_by&limit=1" | jq -c '.metadata.aggregations.offered_by[0:15]'
           U=https://ocw.mit.edu/courses/8-01sc-classical-mechanics-fall-2016
-          g $U/sitemap.xml | grep -o '<loc>[^<]*</loc>' | sed 's/<[^>]*>//g' | sed -n '1,6p;60,64p'
-          echo "--- video_galleries"; g $U/video_galleries/ | grep -oE 'https?://[^"]*(youtube|archive\.org|youtu\.be)[^"]*' | sort -u | head -8
-          echo "--- links in video_galleries"; g $U/video_galleries/lecture-videos/ | grep -oE 'href="[^"]*(resources|pages)[^"]*"' | sort -u | head -8
-          echo "##### download page (PDF)"; g $U/download/ | grep -oE 'https?://[^"]+\.(zip|pdf)' | sort -u | head -3
-          echo "##### Yale"
-          g https://oyc.yale.edu/courses | grep -oE 'href="/[^"]*"' | sort -u | head -15
-          g https://oyc.yale.edu/ | grep -oiE '(youtube[^"]*|archive\.org[^"]*)' | sort -u | head -5
+          echo "##### course home: internal links"; g $U/ | python3 -c "
+          import re,sys
+          h=sys.stdin.read()
+          for m in sorted(set(re.findall(r'href=\"(/courses/8-01sc[^\"#]*)\"[^>]*>([^<]{0,60})',h)))[:30]: print(m)
+          print('--- has <main>:', '<main' in h, ' len', len(h))
+          i=h.find('id=\"course-description')
+          print(h[i:i+600] if i>0 else 'no course-description')
+          "
+          echo "##### lecture-videos page links"; g $U/video_galleries/lecture-videos/ | grep -oE 'href="[^"]*resources[^"]*"' | sort -u | head -6
+          echo "##### one video resource page"; R=$(g $U/video_galleries/lecture-videos/ | grep -oE '/courses/8-01sc[^"]*/resources/[^"]*' | head -1); echo "R=$R"
+          g https://ocw.mit.edu$R | python3 -c "
+          import re,sys
+          h=sys.stdin.read()
+          print('len',len(h))
+          for pat in [r'(https?://[^\"\' ]*youtube[^\"\' ]*)',r'(https?://[^\"\' ]*archive\.org[^\"\' ]*)',r'(https?://[^\"\' ]*\.(?:mp4|pdf|vtt)[^\"\' ]*)',r'data-youtube[^=]*=\"([^\"]*)\"',r'youtube_id[^,]{0,60}']:
+              print(pat[:25],'=>',sorted(set(re.findall(pat,h)))[:6])
+          i=h.find('<h1'); print(h[i:i+500])
+          "
+          echo "##### a regular content page"; g $U/pages/syllabus/ | python3 -c "
+          import re,sys
+          h=sys.stdin.read()
+          i=h.find('id=\"main-content'); print('main-content idx',i)
+          print(re.sub(r'\s+',' ',h[i:i+1200]))
+          "
