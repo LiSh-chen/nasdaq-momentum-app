@@ -28,9 +28,13 @@ check(mitx.items.length > 0 && mitx.items.every((c) => !c.unified), `MITx：${mi
 
 const ocw = await searchCourses({ q: 'classical mechanics 8.01', offeredBy: 'ocw' });
 const target = ocw.items.find((c) => c.url.includes('8-01sc')) ?? ocw.items[0];
-console.log('  測試課程:', target.title, target.url);
-const outline = await fetchOutline(target.url);
-const pages = flattenOutline(outline);
+const tryOutline = async (c) => { const o = await fetchOutline(c.url); return { c, o, pages: flattenOutline(o) }; };
+let picked = await tryOutline(target);
+// 搜尋結果未必是大型課程；挑第一門頁面數夠多的來驗證
+for (const c of ocw.items) { if (picked.pages.length >= 10) break; picked = await tryOutline(c); }
+const outline = picked.o;
+const pages = picked.pages;
+console.log('  測試課程:', picked.c.title, picked.c.url);
 check(outline.length >= 3 && pages.length >= 10, `章節 ${outline.length} 個、頁面 ${pages.length} 個`);
 console.log('  前幾頁:', pages.slice(0, 6).map((p) => `${p.section} > ${p.title}`));
 
@@ -50,6 +54,25 @@ const vidPages = pages.filter((p) => /video_galleries/.test(p.url));
 if (vidPages[0]) {
   const html = await (await fetch(vidPages[0].url)).text();
   console.log(`  影片頁 main=${html.includes('course-main-content')} youtube-embed=${(html.match(/youtube\.com\/embed/g) || []).length} mp4=${(html.match(/\.mp4/g) || []).length} ${vidPages[0].url}`);
+}
+// 影片資源頁：看實際的播放器標記，判斷 App 內能否直接播放
+const resLinks = [];
+for (const p of pages.filter((p) => /video|lecture/i.test(p.url + p.title)).slice(0, 4)) {
+  const html = await (await fetch(p.url)).text();
+  const found = [...html.matchAll(/href="([^"]*\/resources\/[^"#?]+)"/g)].map((m) => new URL(m[1], p.url).toString());
+  console.log(`  ${p.title}: 內含資源連結 ${new Set(found).size} 個, <iframe>=${(html.match(/<iframe/g) || []).length} <video>=${(html.match(/<video/g) || []).length}`);
+  resLinks.push(...found);
+  if (resLinks.length) break;
+}
+const first = [...new Set(resLinks)][0];
+if (first) {
+  const html = await (await fetch(first)).text();
+  const pat = (re) => (html.match(re) || []).length;
+  console.log(`  資源頁 ${first}`);
+  console.log(`   <video>=${pat(/<video/g)} <iframe>=${pat(/<iframe/g)} youtube=${pat(/youtube/gi)} archive.org=${pat(/archive\.org/g)} .mp4=${pat(/\.mp4/g)} .pdf=${pat(/\.pdf/g)} video.js=${pat(/video-js|videojs/gi)} main=${html.includes('course-main-content')}`);
+  const ifr = [...html.matchAll(/<iframe[^>]*src="([^"]+)"/g)].map((m) => m[1]).slice(0, 3);
+  const yt = [...html.matchAll(/(?:youtube\.com\/(?:embed\/|watch\?v=)|youtu\.be\/)([\w-]{11})/g)].map((m) => m[1]).slice(0, 3);
+  console.log('   iframe src:', ifr, ' youtube ids:', yt);
 }
 console.log(failed ? `\n${failed} 項失敗` : '\n全部通過');
 process.exit(failed ? 1 : 0);
