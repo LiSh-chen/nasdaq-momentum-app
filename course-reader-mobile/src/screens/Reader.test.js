@@ -1,6 +1,6 @@
 import React from 'react';
 import { Linking } from 'react-native';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Reader from './Reader';
 import { READER_JS } from '../reader/inject';
@@ -59,7 +59,9 @@ test('點到目錄中的頁面在閱讀器內切換；課程內其他頁面直�
   expect(should({ url: 'https://www.youtube.com/embed/abc', isTopFrame: false })).toBe(true);
 
   // 目錄中的其他頁面：不走網頁導覽，改由閱讀器切頁
-  expect(should({ url: pages[2].url + '#top' })).toBe(false);
+  let blocked;
+  act(() => { blocked = should({ url: pages[2].url + '#top' }); });
+  expect(blocked).toBe(false);
   expect(getByText('3 / 3')).toBeTruthy();
 
   // 同一門課、不在目錄中的頁面（如影片資源頁）：直接在 WebView 載入
