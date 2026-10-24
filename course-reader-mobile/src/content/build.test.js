@@ -201,3 +201,14 @@ test('檔名就是頁面上某部影片的代碼時，視為該影片的逐字�
   });
   expect(c.materials.map((m) => [m.title, m.category])).toEqual([['Course Introduction（逐字稿）', 'lecture'], ['講義', 'lecture']]);
 });
+
+test('嵌入影片自帶的通用標題（YouTube video player）改用頁面標題', () => {
+  const one = buildContent({ url: 'https://oyc.yale.edu/a/b/lecture-1', title: 'ASTR 160 - Yale', heading: 'Lecture 1: Introduction', frames: [{ src: 'https://www.youtube.com/embed/nzmFc2gjUo4', title: 'YouTube video player', section: '' }] });
+  expect(one.videos[0].title).toBe('Lecture 1: Introduction');
+  const two = buildContent({ url: 'https://x.edu/c', title: '課程', frames: [
+    { src: 'https://www.youtube.com/embed/aaaaaaaaaaa', title: 'YouTube video player', section: '' },
+    { src: 'https://www.youtube.com/embed/bbbbbbbbbbb', title: 'Video player', section: '' },
+    { src: 'https://www.youtube.com/embed/ccccccccccc', title: '第三講', section: '' },
+  ] });
+  expect(two.videos.map((v) => v.title)).toEqual(['課程 1', '課程 2', '第三講']);
+});

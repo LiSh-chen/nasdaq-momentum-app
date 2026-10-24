@@ -143,6 +143,12 @@ export function buildContent(raw) {
     if (related.length >= 40) break;
   }
 
+  // 嵌入影片自帶的通用標題（YouTube video player）沒有資訊量，改用頁面標題
+  const GENERIC_PLAYER = /^(youtube video player|video player|player|embedded video|vimeo video player)$/i;
+  const pageTitle = clean(raw.heading) || cleanTitle(raw.title ?? '');
+  const generic = videos.filter((v) => GENERIC_PLAYER.test(v.title));
+  generic.forEach((v, i) => { v.title = pageTitle ? (generic.length > 1 ? `${pageTitle} ${i + 1}` : pageTitle) : v.title; });
+
   const outline = (raw.headings ?? []).map((h) => ({ level: h.level, text: clean(h.text) })).filter((h) => h.text);
   // 太短的多半是按鈕或選單文字；中文資訊密度高，門檻訂為 8 個字以保留「授課教師：王大明」這類短資訊
 const overview = [...new Set((raw.paras ?? []).map(clean).filter((s) => s.length >= 8 && !/[«»]/.test(s) && !/^(previous|next)\b/i.test(s) && !CODEISH.test(s)))].slice(0, 12);
