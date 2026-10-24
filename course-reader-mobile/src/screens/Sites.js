@@ -11,7 +11,7 @@ import { Btn } from '../ui';
 
 const SITES_KEY = 'sites';
 
-export default function Sites() {
+export default function Sites({ onOrganize }) {
   const [sites, setSites] = useState(defaultSites);
   const [active, setActive] = useState(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -96,6 +96,7 @@ export default function Sites() {
         <Btn label="→" disabled={!nav.canGoForward} onPress={() => web.current?.goForward()} />
         <Btn label="⟳" disabled={!active} onPress={() => web.current?.reload()} />
         <Text style={styles.title} numberOfLines={1}>{active?.name ?? '課程閱讀器'}</Text>
+        <Btn label="整理" disabled={!active || !onOrganize} onPress={() => onOrganize(nav.url || active.url)} />
         <Btn label="登出" disabled={!active} onPress={logout} />
       </View>
 

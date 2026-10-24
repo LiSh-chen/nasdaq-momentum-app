@@ -4,6 +4,7 @@ import { BackHandler, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import CourseDetail from './src/screens/CourseDetail';
+import ExtractScreen from './src/screens/ExtractScreen';
 import Explore from './src/screens/Explore';
 import Library from './src/screens/Library';
 import Reader from './src/screens/Reader';
@@ -50,13 +51,26 @@ function Shell() {
       />
     );
   } else if (top?.name === 'reader') {
-    overlay = <Reader course={top.course} pages={top.pages} startIndex={top.startIndex} onClose={pop} />;
+    overlay = (
+      <Reader course={top.course} pages={top.pages} startIndex={top.startIndex} onClose={pop}
+        onOrganize={(url) => push({ name: 'extract', url })} />
+    );
+  } else if (top?.name === 'extract') {
+    overlay = (
+      <ExtractScreen
+        key={top.url}
+        url={top.url}
+        onClose={pop}
+        onOpenPage={(url) => push({ name: 'extract', url })}
+        onOpenSource={(url) => push({ name: 'web', title: '原頁面', url })}
+      />
+    );
   } else if (top?.name === 'web') {
     overlay = <WebPage title={top.title} url={top.url} onClose={pop} />;
   }
 
   // 閱讀器與網頁自帶工具列；課程詳情則在上方補一條返回列
-  const fullScreen = top?.name === 'reader' || top?.name === 'web';
+  const fullScreen = top && top.name !== 'detail';
 
   return (
     <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
@@ -77,7 +91,7 @@ function Shell() {
             {/* 探索頁保持掛載，切換分頁或進入課程後仍保留搜尋條件與結果 */}
             <View style={[styles.fill, tab !== 'explore' && styles.hidden]}><Explore onOpenCourse={openCourse} /></View>
             {tab === 'library' && <Library key={libraryKey} onOpenCourse={openCourse} />}
-            {tab === 'sites' && <Sites />}
+            {tab === 'sites' && <Sites onOrganize={(url) => push({ name: 'extract', url })} />}
           </View>
           <View style={styles.tabs}>
             {TABS.map((t) => (

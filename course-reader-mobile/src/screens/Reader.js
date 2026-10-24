@@ -8,7 +8,7 @@ import { saveProgress } from '../store';
 import { Btn, colors } from '../ui';
 
 // 統一閱讀介面：課程頁面內容、導覽列、章節目錄與進度都由本 App 提供
-export default function Reader({ course, pages, startIndex = 0, onClose }) {
+export default function Reader({ course, pages, startIndex = 0, onClose, onOrganize }) {
   const [index, setIndex] = useState(startIndex);
   const [toc, setToc] = useState(false);
   const web = useRef(null);
@@ -39,6 +39,7 @@ export default function Reader({ course, pages, startIndex = 0, onClose }) {
       <View style={styles.bar}>
         <Btn label="✕" onPress={onClose} />
         <Text style={styles.title} numberOfLines={1}>{page.title}</Text>
+        {onOrganize ? <Btn label="整理" onPress={() => onOrganize(page.url)} /> : null}
         <Btn label="目錄" onPress={() => setToc(true)} />
       </View>
       <View style={styles.progress}>

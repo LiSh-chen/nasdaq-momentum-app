@@ -7,7 +7,7 @@ jest.mock('react-native-webview', () => {
   const React = require('react');
   const { View } = require('react-native');
   const WebView = React.forwardRef((props, ref) => {
-    React.useImperativeHandle(ref, () => ({ goBack: jest.fn(), goForward: jest.fn(), reload: jest.fn() }));
+    React.useImperativeHandle(ref, () => ({ goBack: jest.fn(), goForward: jest.fn(), reload: jest.fn(), injectJavaScript: jest.fn() }));
     return <View testID="webview" {...props} />;
   });
   return { WebView };
