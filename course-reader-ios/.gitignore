@@ -1,0 +1,8 @@
+node_modules/
+.expo/
+dist/
+# 以下由 scripts/sync.mjs 從 course-reader-mobile 產生，不放進版本控制
+App.js
+src/
+sites.default.json
+jest.setup.js

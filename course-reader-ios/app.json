@@ -1,0 +1,10 @@
+{
+  "expo": {
+    "name": "課程閱讀器",
+    "slug": "course-reader",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
+    "ios": { "supportsTablet": true, "bundleIdentifier": "com.example.coursereader" }
+  }
+}

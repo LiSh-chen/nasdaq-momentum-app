@@ -1,0 +1,31 @@
+name: iOS (Expo Go) bundle
+
+on:
+  push:
+    branches: [claude/campus-course-reader-wmmoor]
+    paths: ['course-reader-ios/**', 'course-reader-mobile/src/**', 'course-reader-mobile/App.js', '.github/workflows/publish-ios.yml']
+  workflow_dispatch:
+
+jobs:
+  ios:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: course-reader-ios
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: WITH_TESTS=1 node scripts/sync.mjs
+      - run: npm install --legacy-peer-deps
+      - run: npx jest
+      - run: CI=1 npx expo export --platform ios
+      - name: Publish to Expo Go (only when EXPO_TOKEN secret exists)
+        if: env.EXPO_TOKEN != ''
+        run: |
+          npm i -g eas-cli
+          eas init --force --non-interactive || true
+          eas update --branch main --message "ci ${GITHUB_SHA::7}" --non-interactive --platform ios
