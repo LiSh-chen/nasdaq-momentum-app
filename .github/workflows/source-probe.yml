@@ -1,0 +1,29 @@
+name: Probe candidate course sources
+on:
+  push:
+    paths: ['.github/workflows/source-probe.yml']
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: probe (plain requests, honest user agent; challenge pages are reported, not bypassed)
+        run: |
+          UA="Mozilla/5.0 (compatible; course-reader-probe/1.0)"
+          g(){ curl -sL -m 25 -A "$UA" -w "\n[HTTP %{http_code} %{content_type} size=%{size_download}]\n" "$1"; }
+          show(){ echo; echo "=================== $1"; g "$1" > /tmp/out.txt; head -c ${2:-700} /tmp/out.txt | tr -s '\n ' ; echo; tail -n 1 /tmp/out.txt; grep -qiE "just a moment|attention required|cf-chl|captcha" /tmp/out.txt && echo "!! CHALLENGE PAGE"; }
+          show "https://oyc.yale.edu/courses" 300
+          echo "--- yale course links:"; g "https://oyc.yale.edu/courses" | grep -oE 'href="/[a-z-]+/[a-z]+-[0-9a-z]+"' | head -5
+          show "https://oyc.yale.edu/astronomy/astr-160" 300
+          g "https://oyc.yale.edu/astronomy/astr-160" | grep -oiE '(youtube[^"]{0,60}|archive\.org[^"]{0,60}|<h1[^>]*>[^<]*|og:title[^>]*|og:image[^>]*)' | head -8
+          show "https://api.coursera.org/api/courses.v1?start=0&limit=2&fields=name,slug,photoUrl,description,primaryLanguages,workload" 900
+          show "https://www.coursera.org/api/catalogResults.v2?q=search&query=python&start=0&limit=2&fields=courseId,onDemandSpecializationId,courses.v1(name,slug,photoUrl,description)&includes=courseId(courses.v1)" 900
+          show "https://www.edx.org/search?q=python" 300
+          show "https://www.khanacademy.org/search?page_search_query=calculus" 300
+          show "https://online.stanford.edu/search-catalog?keywords=python" 300
+          show "https://ocw.nycu.edu.tw/" 300
+          show "https://sharecourse.net/" 300
+          show "https://www.ewant.org/" 300
+          show "https://www.junyiacademy.org/" 300
+          show "https://www.open.edu/openlearn/free-courses/full-catalogue" 300
+          show "https://ocw.aca.ntu.edu.tw/ntu-ocw/" 200
