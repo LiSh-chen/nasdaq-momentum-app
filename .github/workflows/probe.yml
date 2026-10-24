@@ -8,16 +8,26 @@ jobs:
     steps:
       - name: probe
         run: |
-          t(){ echo; echo "=================== $1"; curl -sL -m 30 -A "Mozilla/5.0" -w "\n[HTTP %{http_code} %{content_type}]\n" "$1" | head -c ${2:-1500}; echo; }
-          t "https://api.learn.mit.edu/api/v1/courses/?offered_by=ocw&q=physics&limit=1" 3500
-          t "https://api.learn.mit.edu/api/v1/learning_resources/?offered_by=ocw&resource_type=course&limit=1" 300
-          t "https://api.learn.mit.edu/api/v1/learning_resources/?offered_by=ocw&resource_type=video&limit=1" 1500
-          t "https://api.coursera.org/api/courses.v1?q=search&query=python&limit=1&fields=name,slug,photoUrl,description,primaryLanguages" 1200
-          t "https://ocw.mit.edu/courses/8-01sc-classical-mechanics-fall-2016/" 1200
-          t "https://ocw.mit.edu/courses/8-01sc-classical-mechanics-fall-2016/video_galleries/" 800
-          t "https://ocw.mit.edu/courses/8-01sc-classical-mechanics-fall-2016/sitemap.xml" 800
-          t "https://ocw.mit.edu/sitemap.xml" 500
-          t "https://ocw.aca.ntu.edu.tw/ntu-ocw/" 1500
-          t "https://ocw.aca.ntu.edu.tw/ntu-ocw/index.php/ocw/search?keyword=%E5%BE%AE%E7%A9%8D%E5%88%86" 1500
-          t "https://oyc.yale.edu/" 1200
-          t "https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=PPLop4L2eGk&format=json" 500
+          B=https://api.learn.mit.edu/api/v1
+          g(){ curl -sL -m 30 -A "Mozilla/5.0" "$1"; }
+          echo "##### course result: selected fields"
+          g "$B/courses/?offered_by=ocw&q=classical+mechanics&limit=2" | jq -c '.results[] | {id,readable_id,title,url,resource_type,free,image:.image.url,topics:[.topics[].name],level:[.runs[0].level[]?.name],dept:[.departments[].name],feat:.course_feature,inst:[.runs[0].instructors[]?.full_name],children:(.children|length),keys:keys}'
+          echo "##### aggregations (facets)"
+          g "$B/learning_resources/?resource_type=course&aggregations=offered_by&aggregations=topic&aggregations=level&aggregations=department&aggregations=course_feature&aggregations=free&limit=1" | jq -c '.metadata.aggregations // .metadata | with_entries(.value |= (if type=="array" then .[0:8] else . end))' | head -c 3500
+          echo; echo "##### all offerers/platforms"
+          g "$B/learning_resources/?resource_type=course&aggregations=platform&limit=1" | jq -c '.metadata.aggregations.platform[0:20]'
+          echo "##### video resource"
+          g "$B/learning_resources/?offered_by=ocw&resource_type=video&limit=1" | jq -c '.results[0] | {id,readable_id,title,url,duration:.video,playlist:.playlist,keys:keys, runs:(.runs|length)}'
+          echo "##### items of a course (id from search)"
+          CID=$(g "$B/courses/?offered_by=ocw&q=classical+mechanics&limit=1" | jq '.results[0].id')
+          echo "course id=$CID"
+          for p in "learning_resources/$CID/items/?limit=3" "courses/$CID/items/?limit=3" "contentfiles/?learning_resource_id=$CID&limit=2"; do echo "--- $p"; g "$B/$p" | head -c 1800; echo; done
+          echo "##### OCW page structure: video + resources"
+          U=https://ocw.mit.edu/courses/8-01sc-classical-mechanics-fall-2016
+          g $U/sitemap.xml | grep -o '<loc>[^<]*</loc>' | sed 's/<[^>]*>//g' | sed -n '1,6p;60,64p'
+          echo "--- video_galleries"; g $U/video_galleries/ | grep -oE 'https?://[^"]*(youtube|archive\.org|youtu\.be)[^"]*' | sort -u | head -8
+          echo "--- links in video_galleries"; g $U/video_galleries/lecture-videos/ | grep -oE 'href="[^"]*(resources|pages)[^"]*"' | sort -u | head -8
+          echo "##### download page (PDF)"; g $U/download/ | grep -oE 'https?://[^"]+\.(zip|pdf)' | sort -u | head -3
+          echo "##### Yale"
+          g https://oyc.yale.edu/courses | grep -oE 'href="/[^"]*"' | sort -u | head -15
+          g https://oyc.yale.edu/ | grep -oiE '(youtube[^"]*|archive\.org[^"]*)' | sort -u | head -5
