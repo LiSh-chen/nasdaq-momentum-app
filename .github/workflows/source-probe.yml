@@ -7,24 +7,56 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: probe (plain requests, honest user agent; challenge pages are reported, not bypassed)
+      - name: probe round 2 (plain requests, honest user agent; challenge pages are reported, not bypassed)
         run: |
           set +e
           UA="Mozilla/5.0 (compatible; course-reader-probe/1.0)"
-          g(){ curl -sL -m 25 -A "$UA" -w "\n[HTTP %{http_code} %{content_type} size=%{size_download}]\n" "$1"; }
-          show(){ echo; echo "=================== $1"; g "$1" > /tmp/out.txt; head -c ${2:-700} /tmp/out.txt | tr -s '\n ' ; echo; tail -n 1 /tmp/out.txt; grep -qiE "just a moment|attention required|cf-chl|captcha" /tmp/out.txt && echo "!! CHALLENGE PAGE"; }
-          show "https://oyc.yale.edu/courses" 300
-          echo "--- yale course links:"; g "https://oyc.yale.edu/courses" | grep -oE 'href="/[a-z-]+/[a-z]+-[0-9a-z]+"' | head -5
-          show "https://oyc.yale.edu/astronomy/astr-160" 300
-          g "https://oyc.yale.edu/astronomy/astr-160" | grep -oiE '(youtube[^"]{0,60}|archive\.org[^"]{0,60}|<h1[^>]*>[^<]*|og:title[^>]*|og:image[^>]*)' | head -8
-          show "https://api.coursera.org/api/courses.v1?start=0&limit=2&fields=name,slug,photoUrl,description,primaryLanguages,workload" 900
-          show "https://www.coursera.org/api/catalogResults.v2?q=search&query=python&start=0&limit=2&fields=courseId,onDemandSpecializationId,courses.v1(name,slug,photoUrl,description)&includes=courseId(courses.v1)" 900
-          show "https://www.edx.org/search?q=python" 300
-          show "https://www.khanacademy.org/search?page_search_query=calculus" 300
-          show "https://online.stanford.edu/search-catalog?keywords=python" 300
-          show "https://ocw.nycu.edu.tw/" 300
-          show "https://sharecourse.net/" 300
-          show "https://www.ewant.org/" 300
-          show "https://www.junyiacademy.org/" 300
-          show "https://www.open.edu/openlearn/free-courses/full-catalogue" 300
-          show "https://ocw.aca.ntu.edu.tw/ntu-ocw/" 200
+          g(){ curl -sL -m 25 -A "$UA" "$1"; }
+          sec(){ echo; echo "=================== $*"; }
+
+          sec "MIT Learn: which platforms/offerers exist for courses (search endpoint)"
+          g "https://api.learn.mit.edu/api/v1/learning_resources_search/?resource_type=course&aggregations=platform&aggregations=offered_by&limit=1" | jq -c '.metadata.aggregations | {platform, offered_by}'
+
+          sec "Yale OYC: listing item markup + a course page's metadata"
+          g "https://oyc.yale.edu/courses" > /tmp/y.html
+          echo "listing links: $(grep -oE 'href="/[a-z-]+/[a-z]+-[0-9a-z]+"' /tmp/y.html | sort -u | wc -l)"
+          grep -n -m1 -B6 -A10 'astr-160' /tmp/y.html | tr -s ' \n' | head -c 1500
+          g "https://oyc.yale.edu/astronomy/astr-160" > /tmp/y2.html
+          grep -oE '<meta (property|name)="(og:title|og:description|og:image|description)"[^>]*>' /tmp/y2.html | head -5
+          grep -oE '<(iframe|video)[^>]*>' /tmp/y2.html | head -3
+          grep -oE 'href="[^"]*(youtube|\.pdf|\.mp3|\.mp4|archive)[^"]*"' /tmp/y2.html | head -5
+
+          sec "NYCU OCW: structure + search"
+          g "https://ocw.nycu.edu.tw/" > /tmp/n.html
+          echo "title: $(grep -oE '<title>[^<]*' /tmp/n.html | head -1)  len=$(wc -c < /tmp/n.html)"
+          grep -oE '<form[^>]*>' /tmp/n.html | head -3
+          grep -oE 'href="https://ocw.nycu.edu.tw/[^"]*"' /tmp/n.html | sort -u | head -25
+          g "https://ocw.nycu.edu.tw/?s=%E5%BE%AE%E7%A9%8D%E5%88%86" > /tmp/n2.html
+          echo "search len=$(wc -c < /tmp/n2.html) title: $(grep -oE '<title>[^<]*' /tmp/n2.html | head -1)"
+          grep -oE '<h[1-4][^>]*>\s*<a[^>]*>[^<]*' /tmp/n2.html | head -8
+
+          sec "ShareCourse"
+          g "https://sharecourse.net/sharecourse" > /tmp/s.html
+          echo "title: $(grep -oE '<title>[^<]*' /tmp/s.html | head -1) len=$(wc -c < /tmp/s.html)"
+          grep -oE '<form[^>]*>' /tmp/s.html | head -3
+          grep -oE 'href="[^"]*(course|search)[^"]*"' /tmp/s.html | sort -u | head -20
+
+          sec "edX search page: embedded data?"
+          g "https://www.edx.org/search?q=python" > /tmp/e.html
+          echo "len=$(wc -c < /tmp/e.html) next_data=$(grep -c '__NEXT_DATA__' /tmp/e.html) self.__next_f=$(grep -c 'self.__next_f' /tmp/e.html)"
+          grep -oiE '"(title|name)":"[^"]*python[^"]*"' /tmp/e.html | head -5
+          grep -oE 'https://[a-z0-9.-]*(algolia|edx)[a-z0-9./_-]*search[^"]*' /tmp/e.html | sort -u | head -5
+          sec "edX catalog api guesses"
+          for u in "https://www.edx.org/api/v1/catalog/search?q=python" "https://discovery.edx.org/api/v1/search/all/?q=python"; do echo "$u -> $(curl -s -o /dev/null -w '%{http_code} %{content_type}' -m 20 -A "$UA" "$u")"; done
+
+          sec "Junyi: embedded data?"
+          g "https://www.junyiacademy.org/" > /tmp/j.html
+          echo "next_data=$(grep -c '__NEXT_DATA__' /tmp/j.html)"
+          grep -oE '<script id="__NEXT_DATA__"[^>]*>' /tmp/j.html | head -1
+          sed -n 's/.*<script id="__NEXT_DATA__"[^>]*>\(.*\)<\/script>.*/\1/p' /tmp/j.html | head -c 1200
+          echo; g "https://www.junyiacademy.org/api/v2/topictree/topics?lang=zh-hant" | head -c 400
+
+          sec "Coursera: catalog api paging + site search page"
+          g "https://api.coursera.org/api/courses.v1?limit=1&fields=name" | jq -c '{paging, n:(.elements|length)}'
+          g "https://api.coursera.org/api/courses.v1?q=search&query=python&limit=1&fields=name" | head -c 200
+          echo; curl -s -o /dev/null -w "search page: %{http_code} %{size_download}\n" -m 20 -A "$UA" "https://www.coursera.org/search?query=python"
