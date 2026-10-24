@@ -7,34 +7,26 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: probe round 3 (plain requests, honest user agent; challenge pages are reported, not bypassed)
+      - name: probe round 4 (robots.txt first; plain requests, honest user agent)
         run: |
           set +e
           UA="Mozilla/5.0 (compatible; course-reader-probe/1.0)"
           g(){ curl -sL -m 30 -A "$UA" "$1"; }
           sec(){ echo; echo "=================== $*"; }
 
-          sec "NYCU: search results markup"
+          for site in https://www.coursera.org https://ocw.nycu.edu.tw https://oyc.yale.edu https://www.sharecourse.net; do
+            sec "robots.txt $site"
+            g "$site/robots.txt" | grep -iE '^(user-agent|disallow|allow|crawl-delay)' | head -25
+          done
+
+          sec "NYCU: markup around a search result"
           g "https://ocw.nycu.edu.tw/?s=%E5%BE%AE%E7%A9%8D%E5%88%86" > /tmp/n2.html
-          grep -oE 'href="https://ocw.nycu.edu.tw/\?[a-z_]+=[^"]*"' /tmp/n2.html | grep -vE 'openedu|donate|faq|feed|lang=|page_id|feedback|story_page|speech' | sort -u | head -12
-          I=$(grep -n -m1 -E 'course=|\?post_type=course|entry-title|course-title' /tmp/n2.html | head -1 | cut -d: -f1); echo "first marker line: $I"
-          [ -n "$I" ] && sed -n "$((I-3)),$((I+14))p" /tmp/n2.html | tr -s ' \t' | cut -c1-260
-          sec "NYCU: all-course listing markup"
-          g "https://ocw.nycu.edu.tw/?course_page=all-course" > /tmp/n3.html
-          echo "len=$(wc -c < /tmp/n3.html) title: $(grep -oE '<title>[^<]*' /tmp/n3.html | head -1)"
-          grep -oE 'href="https://ocw.nycu.edu.tw/\?course=[^"]*"' /tmp/n3.html | sort -u | wc -l
-          grep -oE 'href="https://ocw.nycu.edu.tw/\?course=[^"]*"' /tmp/n3.html | sort -u | head -3
-          J=$(grep -n -m1 -E '\?course=' /tmp/n3.html | cut -d: -f1); [ -n "$J" ] && sed -n "$((J-4)),$((J+10))p" /tmp/n3.html | tr -s ' \t' | cut -c1-260
+          I=$(grep -n -m1 'course_page=all-course/college-of-science/am/%e5%be%ae%e7%a9%8d%e5%88%86%e4%b8%80-calculus-i-%e6%87%89' /tmp/n2.html | cut -d: -f1); echo "line: $I"
+          sed -n "$((I-6)),$((I+12))p" /tmp/n2.html | tr -s ' \t' | cut -c1-300
+          echo "--- distinct course anchors with text:"
+          grep -oE '<a[^>]*href="https://ocw.nycu.edu.tw/\?course_page=all-course/[^"]*"[^>]*>[^<]{2,80}' /tmp/n2.html | sed -E 's/<a[^>]*href="[^"]*"[^>]*>//' | sort -u | head -12
 
-          sec "ShareCourse: search form inputs + results"
-          g "https://www.sharecourse.net/sharecourse" | grep -A12 'id="myform"' | grep -oE '<(input|select|button)[^>]*>' | head -8
-          g "https://www.sharecourse.net/sharecourse/course/view/searchCourse?keyword=%E5%BE%AE%E7%A9%8D%E5%88%86" > /tmp/s2.html
-          echo "len=$(wc -c < /tmp/s2.html) title: $(grep -oE '<title>[^<]*' /tmp/s2.html | head -1)"
-          grep -oE 'href="[^"]*(courseInfo|course/view/[a-zA-Z]+/[0-9]+)[^"]*"' /tmp/s2.html | sort -u | head -6
-          K=$(grep -n -m1 -E 'courseInfo|course/view/[a-zA-Z]+/[0-9]+' /tmp/s2.html | cut -d: -f1); [ -n "$K" ] && sed -n "$((K-4)),$((K+14))p" /tmp/s2.html | tr -s ' \t' | cut -c1-240
-
-          sec "Coursera search page: SSR data?"
+          sec "Coursera: shape of one search hit in SSR data"
           g "https://www.coursera.org/search?query=python" > /tmp/c.html
-          echo "len=$(wc -c < /tmp/c.html) next_data=$(grep -c '__NEXT_DATA__' /tmp/c.html) apollo=$(grep -ci 'apollo' /tmp/c.html)"
-          grep -oE '"name":"[^"]{4,80}"' /tmp/c.html | sort -u | head -12
-          grep -oE '/learn/[a-z0-9-]+' /tmp/c.html | sort -u | head -8
+          K=$(grep -ob '"name":"Crash Course on Python"' /tmp/c.html | head -1 | cut -d: -f1); echo "offset: $K"
+          [ -n "$K" ] && head -c $((K+900)) /tmp/c.html | tail -c 1500 | tr -s ' \n'
