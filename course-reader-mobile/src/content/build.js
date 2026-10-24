@@ -24,6 +24,7 @@ export function titleFromUrl(url) {
   try { name = decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() || ''); } catch { name = url; }
   return name
     .replace(/\.[a-z0-9]{2,4}$/i, '')
+    .replace(/^[0-9a-f]{16,}[_-]?/i, '') // OCW 檔名常是「雜湊_檔名」，去掉前面的雜湊
     .replace(/_(pdf|pptx?|docx?|xlsx?|zip|mp4)$/i, '')
     .replace(/[_-]?(360|480|720|1080)p$/i, '')
     .replace(/[_-]+/g, ' ')
