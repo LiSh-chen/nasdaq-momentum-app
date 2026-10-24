@@ -48,7 +48,7 @@ test('開啟後預設搜尋「全部」來源並顯示課程；需登入的課�
 test('來源切換列：全部、MIT、耶魯、陽明交大', async () => {
   const { getByText } = render(<Explore onOpenCourse={() => {}} />);
   await flush();
-  for (const label of ['全部', 'MIT', '耶魯', '陽明交大']) expect(getByText(label)).toBeTruthy();
+  for (const label of ['全部', 'MIT', '耶魯', '陽明交大', '臺大']) expect(getByText(label)).toBeTruthy();
   fireEvent.press(getByText('耶魯'));
   await flush();
   expect(last().provider).toBe('yale');
@@ -118,7 +118,7 @@ test('部分來源連線失敗時提示，仍顯示其他結果', async () => {
 test('不開放搜尋的網站會說明改走「網站」分頁', async () => {
   const { getByText } = render(<Explore onOpenCourse={() => {}} />);
   await flush();
-  expect(getByText(/臺大、Coursera、edX 等網站不開放自動搜尋/)).toBeTruthy();
+  expect(getByText(/Coursera、edX 等網站不開放自動搜尋/)).toBeTruthy();
 });
 
 test('點課程卡片會開啟課程', async () => {
@@ -141,4 +141,32 @@ test('沒有結果時顯示提示', async () => {
   const { getByText } = render(<Explore onOpenCourse={() => {}} />);
   await flush();
   expect(getByText('找不到符合的課程')).toBeTruthy();
+});
+
+test('臺大：以背景瀏覽器搜尋（附說明），需要關鍵字', async () => {
+  const { getByText, getByPlaceholderText } = render(<Explore onOpenCourse={() => {}} />);
+  await flush();
+  fireEvent.press(getByText('臺大'));
+  await flush();
+  expect(last().provider).toBe('ntu');
+  expect(last().browser).toBeDefined(); // 背景瀏覽器（BrowserRunner 的 ref）
+  expect(getByText('請輸入關鍵字搜尋臺大課程。')).toBeTruthy();
+  expect(getByText(/臺大網站需要驗證/)).toBeTruthy();
+  fireEvent.changeText(getByPlaceholderText('搜尋課程、主題、講師…'), '微積分');
+  await flush();
+  expect(last()).toMatchObject({ provider: 'ntu', q: '微積分' });
+});
+
+test('臺大驗證未完成或逾時時，顯示專屬的錯誤訊息；被新搜尋取代的不算錯誤', async () => {
+  const { getByText, queryByText } = render(<Explore onOpenCourse={() => {}} />);
+  await flush();
+  searchCatalog.mockRejectedValueOnce(new Error('superseded'));
+  fireEvent.press(getByText('臺大'));
+  await flush();
+  expect(queryByText(/臺大網站沒有回應/)).toBeNull();
+  searchCatalog.mockRejectedValue(new Error('timeout'));
+  fireEvent.press(getByText('陽明交大'));
+  fireEvent.press(getByText('臺大'));
+  await flush();
+  expect(getByText(/臺大網站沒有回應或驗證未完成/)).toBeTruthy();
 });

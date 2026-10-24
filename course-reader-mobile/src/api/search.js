@@ -1,4 +1,5 @@
 import { searchCourses } from './mitLearn.js';
+import { searchNtu } from './ntu.js';
 import { searchNycu } from './nycu.js';
 import { searchYale } from './yale.js';
 
@@ -7,6 +8,7 @@ export const PROVIDERS = [
   { id: 'mit', label: 'MIT' },
   { id: 'yale', label: '耶魯' },
   { id: 'nycu', label: '陽明交大' },
+  { id: 'ntu', label: '臺大' },
 ];
 
 // 各來源的結果輪流排列，讓每個來源的課程都看得到
@@ -22,13 +24,15 @@ const settle = async (promise) => {
 };
 
 // 統一的搜尋入口。cursor 是各來源自己的分頁位置（MIT 為 offset、陽明交大為頁碼）。
-export async function searchCatalog({ provider = 'all', q = '', cursor, ...filters } = {}) {
+// browser：需要真實瀏覽器才能讀取的來源（臺大）使用。「全部」不含這類來源，以免拖慢搜尋。
+export async function searchCatalog({ provider = 'all', q = '', cursor, browser, ...filters } = {}) {
   if (provider === 'mit') {
     const r = await searchCourses({ q, ...filters, offset: cursor ?? 0 });
     return { ...r, next: r.hasMore ? (cursor ?? 0) + r.items.length : null };
   }
   if (provider === 'yale') return searchYale(q);
   if (provider === 'nycu') return searchNycu(q, cursor ?? 1);
+  if (provider === 'ntu') return searchNtu(q, cursor ?? 1, browser);
 
   // 全部：只有第一頁會混入其他來源；之後的分頁（載入更多）只延續 MIT
   const mit = await searchCourses({ q, offset: cursor ?? 0 });

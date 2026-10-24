@@ -51,7 +51,14 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
     return hasChapters ? [{ key: 'chapters', label: '章節', count: chapters.length }, ...t] : t;
   }, [content, hasChapters, chapters]);
   // 有影片就先看影片；否則第一個有內容的分頁；這頁沒內容但有章節時顯示章節
-  const [tab, setTab] = useState(() => (tabs.find((t) => t.key === 'videos') ?? tabs.find((t) => t.key !== 'chapters') ?? tabs[0])?.key ?? 'overview');
+  // 優先順序：影片 → 課程首頁（尚未進入任何章節）顯示章節清單 → 第一個有內容的分頁
+  const [tab, setTab] = useState(() => {
+    const t = tabs.find((x) => x.key === 'videos')
+      ?? (hasChapters && typeof chapterIndex !== 'number' ? tabs.find((x) => x.key === 'chapters') : null)
+      ?? tabs.find((x) => x.key !== 'chapters')
+      ?? tabs[0];
+    return t?.key ?? 'overview';
+  });
   const [videoId, setVideoId] = useState(content.videos[0]?.id ?? null);
   const [file, setFile] = useState(null);
   const origin = useMemo(() => { try { return new URL(content.url).origin; } catch { return 'https://localhost'; } }, [content.url]);
@@ -87,7 +94,7 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
         initialScrollIndex={Math.max(0, Math.min(chapterIndex ?? 0, chapters.length - 1))}
         getItemLayout={(_, i) => ({ length: 56, offset: 56 * i, index: i })}
         renderItem={({ item, index }) => (
-          <Pressable style={[styles.chapter, index === chapterIndex && styles.rowActive]} onPress={() => onOpenChapter(index)}>
+          <Pressable style={[styles.chapter, index === chapterIndex && styles.rowActive]} onPress={() => onOpenChapter(index, chapters)}>
             <Text style={styles.rowMeta} numberOfLines={1}>{item.section}</Text>
             <Text style={styles.rowTitle} numberOfLines={1}>{index === chapterIndex ? '▶ ' : ''}{item.title}</Text>
           </Pressable>
@@ -176,9 +183,9 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
 
       {hasChapters && typeof chapterIndex === 'number' ? (
         <View style={styles.chapterNav}>
-          <Btn label="← 上一章" dark disabled={chapterIndex === 0} onPress={() => onOpenChapter(chapterIndex - 1)} />
+          <Btn label="← 上一章" dark disabled={chapterIndex === 0} onPress={() => onOpenChapter(chapterIndex - 1, chapters)} />
           <Text style={styles.source}>{chapterIndex + 1} / {chapters.length}</Text>
-          <Btn label="下一章 →" dark disabled={chapterIndex === chapters.length - 1} onPress={() => onOpenChapter(chapterIndex + 1)} />
+          <Btn label="下一章 →" dark disabled={chapterIndex === chapters.length - 1} onPress={() => onOpenChapter(chapterIndex + 1, chapters)} />
         </View>
       ) : null}
       <View style={styles.foot}>

@@ -71,10 +71,12 @@ export default function ExtractScreen({ url, course, chapters, chapterIndex, onC
   };
 
   if (state.status === 'done') {
+    // 沒有明確的章節清單時，頁面正下一層的子頁面（如臺大的單元、耶魯的講次）就是章節
+    const effective = chapters ?? (state.content.children.length >= 2 ? state.content.children : null);
     return (
       <CourseView
         content={state.content}
-        chapters={chapters}
+        chapters={effective}
         chapterIndex={chapterIndex}
         onClose={onClose}
         onOpenPage={onOpenPage}

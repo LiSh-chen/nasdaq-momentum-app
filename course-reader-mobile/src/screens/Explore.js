@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { LEVEL_NAMES, SOURCE_NAMES } from '../api/mitLearn';
 import { PROVIDERS, searchCatalog } from '../api/search';
+import BrowserRunner from '../components/BrowserRunner';
 import { Chip, colors } from '../ui';
 import CourseCard from './CourseCard';
 
@@ -16,13 +17,14 @@ export default function Explore({ onOpenCourse }) {
   const [filters, setFilters] = useState({ offeredBy: null, level: null, topic: null, hasVideos: false, sort: null });
   const [state, setState] = useState({ items: [], count: 0, facets: {}, loading: true, error: null, next: null, failed: 0 });
   const reqId = useRef(0);
+  const browser = useRef(null);
 
   const run = useCallback(
     async (cursor, append) => {
       const id = ++reqId.current;
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
-        const r = await searchCatalog({ provider, q: query, ...filters, cursor });
+        const r = await searchCatalog({ provider, q: query, ...filters, cursor, browser: browser.current });
         if (id !== reqId.current) return; // 已有較新的搜尋，丟棄舊結果
         setState((s) => ({
           items: append ? [...s.items, ...r.items] : r.items,
@@ -33,9 +35,9 @@ export default function Explore({ onOpenCourse }) {
           loading: false,
           error: null,
         }));
-      } catch {
-        if (id !== reqId.current) return;
-        setState((s) => ({ ...s, loading: false, error: '載入失敗，請檢查網路後再試一次' }));
+      } catch (e) {
+        if (id !== reqId.current || /superseded/.test(e?.message)) return;
+        setState((s) => ({ ...s, loading: false, error: provider === 'ntu' ? '臺大網站沒有回應或驗證未完成，請稍後再試' : '載入失敗，請檢查網路後再試一次' }));
       }
     },
     [provider, query, filters]
@@ -96,12 +98,14 @@ export default function Explore({ onOpenCourse }) {
       <Text style={styles.count}>{state.loading && !state.items.length ? '搜尋中…' : `共 ${state.count} 門課程`}</Text>
       {state.error ? <Text style={styles.error}>{state.error}</Text> : null}
       {state.failed ? <Text style={styles.note}>有 {state.failed} 個來源暫時無法連線，已先顯示其他來源的結果。</Text> : null}
-      {provider === 'nycu' && !query.trim() ? <Text style={styles.note}>請輸入關鍵字搜尋陽明交大課程。</Text> : null}
-      <Text style={styles.note}>臺大、Coursera、edX 等網站不開放自動搜尋，請到「網站」分頁瀏覽後按「整理」。</Text>
+      {(provider === 'nycu' || provider === 'ntu') && !query.trim() ? <Text style={styles.note}>請輸入關鍵字搜尋{provider === 'ntu' ? '臺大' : '陽明交大'}課程。</Text> : null}
+      {provider === 'ntu' ? <Text style={styles.note}>臺大網站需要驗證，搜尋會在背景以內建瀏覽器進行，可能需要幾秒鐘。</Text> : null}
+      <Text style={styles.note}>Coursera、edX 等網站不開放自動搜尋，請到「網站」分頁瀏覽後按「整理」。</Text>
     </View>
   );
 
   return (
+    <View style={{ flex: 1 }}>
     <FlatList
       style={styles.list}
       data={state.items}
@@ -114,6 +118,8 @@ export default function Explore({ onOpenCourse }) {
       onEndReachedThreshold={0.6}
       keyboardShouldPersistTaps="handled"
     />
+    <BrowserRunner ref={browser} />
+    </View>
   );
 }
 

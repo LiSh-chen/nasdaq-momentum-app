@@ -212,3 +212,36 @@ test('嵌入影片自帶的通用標題（YouTube video player）改用頁面標
   ] });
   expect(two.videos.map((v) => v.title)).toEqual(['課程 1', '課程 2', '第三講']);
 });
+
+describe('頁面底下的子頁面自動成為章節', () => {
+  const page = (links, url = 'https://ocw.aca.ntu.edu.tw/courses/100S111') => ({ url, title: 't', heading: '微積分', links });
+  const L = (path, text, extra = {}) => ({ href: `https://ocw.aca.ntu.edu.tw${path}`, text, section: '', nav: false, ...extra });
+
+  test('只取正下一層、有標題、非選單的連結，依出現順序去重', () => {
+    const c = buildContent(page([
+      L('/courses/100S111/58', '第15章 向量場'),
+      L('/courses/100S111/59', '第16章 向量微積分'),
+      L('/courses/100S111/58', '重複'),
+      L('/courses/100S111/59/extra', '更深一層'),
+      L('/courses/100S111/syllabus.pdf', '大綱檔'),
+      L('/courses/100S111/60', '', {}),
+      L('/courses/100S111/61', '選單項目', { nav: true }),
+      L('/courses/999S999/1', '別的課'),
+      L('/courses', '全部課程'),
+    ]));
+    expect(c.children).toEqual([
+      { title: '第15章 向量場', url: 'https://ocw.aca.ntu.edu.tw/courses/100S111/58', section: '單元' },
+      { title: '第16章 向量微積分', url: 'https://ocw.aca.ntu.edu.tw/courses/100S111/59', section: '單元' },
+    ]);
+  });
+
+  test('沒有子頁面時為空；網址以斜線結尾也能運作', () => {
+    expect(buildContent(page([L('/about/terms', '條款')])).children).toEqual([]);
+    expect(buildContent(page([L('/courses/100S111/1', '一')], 'https://ocw.aca.ntu.edu.tw/courses/100S111/')).children).toHaveLength(1);
+  });
+
+  test('長標題（單元名稱可能很長）也保留', () => {
+    const long = '第十六章向量微積分與微分方程的應用以及相關的習題討論與解答說明（上）'.repeat(1);
+    expect(buildContent(page([L('/courses/100S111/1', long)])).children[0].title).toBe(long);
+  });
+});

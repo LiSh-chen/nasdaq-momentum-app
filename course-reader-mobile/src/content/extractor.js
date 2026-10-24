@@ -90,8 +90,17 @@ export const EXTRACT_JS = `
       return (a.getAttribute('aria-label') || a.getAttribute('title') || (img && img.getAttribute('alt')) || '').replace(/\\s+/g, ' ').trim();
     };
 
+    // 連結內的圖片（課程卡片縮圖）；延遲載入的佔位圖不算
+    var linkImage = function (a) {
+      var img = a.querySelector && a.querySelector('img');
+      if (!img) return '';
+      var src = img.currentSrc || img.getAttribute('src') || '';
+      if (!src || /^data:/i.test(src)) src = img.getAttribute('data-src') || img.getAttribute('data-lazy-src') || '';
+      return /^(https?:)?\\/|^https?:/.test(src) ? abs(src) : '';
+    };
+
     var links = [].slice.call(document.querySelectorAll('a[href]')).map(function (a) {
-      return { href: abs(a.getAttribute('href')), text: linkText(a), section: sectionOf(a), context: rowText(a), nav: inChrome(a) };
+      return { href: abs(a.getAttribute('href')), text: linkText(a), section: sectionOf(a), context: rowText(a), image: linkImage(a), nav: inChrome(a) };
     }).filter(function (l) { return /^https?:/.test(l.href); }).slice(0, 800);
 
     // 表單與輸入欄位：用來判斷網站的搜尋方式（網址參數或頁面內搜尋）

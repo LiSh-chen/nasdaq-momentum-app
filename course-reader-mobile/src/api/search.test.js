@@ -2,10 +2,12 @@ import { interleave, searchCatalog } from './search';
 import { searchCourses } from './mitLearn';
 import { searchYale } from './yale';
 import { searchNycu } from './nycu';
+import { searchNtu } from './ntu';
 
 jest.mock('./mitLearn', () => ({ ...jest.requireActual('./mitLearn'), searchCourses: jest.fn() }));
 jest.mock('./yale', () => ({ searchYale: jest.fn() }));
 jest.mock('./nycu', () => ({ searchNycu: jest.fn() }));
+jest.mock('./ntu', () => ({ searchNtu: jest.fn() }));
 
 const c = (id) => ({ id, title: id });
 const res = (ids, extra = {}) => ({ items: ids.map(c), count: ids.length, next: null, facets: {}, ...extra });
@@ -15,6 +17,7 @@ beforeEach(() => {
   searchCourses.mockResolvedValue({ items: ['m1', 'm2', 'm3'].map(c), count: 2596, hasMore: true, facets: { level: [] } });
   searchYale.mockResolvedValue(res(['y1']));
   searchNycu.mockResolvedValue(res(['n1', 'n2'], { next: 2 }));
+  searchNtu.mockResolvedValue(res(['t1'], { next: 2 }));
 });
 
 test('interleave 輪流排列各來源', () => {
@@ -56,4 +59,18 @@ test('全部：某個來源失敗不影響其他來源，並回報失敗數', as
   const r = await searchCatalog({ provider: 'all', q: 'calculus' });
   expect(r.items.map((i) => i.id)).toEqual(['m1', 'n1', 'm2', 'n2', 'm3']);
   expect(r.failed).toBe(1);
+});
+
+test('臺大：把背景瀏覽器與頁碼交給臺大來源', async () => {
+  const browser = { run: jest.fn() };
+  const r = await searchCatalog({ provider: 'ntu', q: '微積分', cursor: 2, browser });
+  expect(searchNtu).toHaveBeenCalledWith('微積分', 2, browser);
+  expect(r.items.map((i) => i.id)).toEqual(['t1']);
+  await searchCatalog({ provider: 'ntu', q: '微積分', browser });
+  expect(searchNtu).toHaveBeenLastCalledWith('微積分', 1, browser);
+});
+
+test('「全部」不包含臺大（需要背景瀏覽器，較慢）', async () => {
+  await searchCatalog({ provider: 'all', q: 'calculus', browser: { run: jest.fn() } });
+  expect(searchNtu).not.toHaveBeenCalled();
 });

@@ -139,3 +139,33 @@ describe('不讓使用者看到轉換過程', () => {
     expect(second.getByTestId('loading')).toBeTruthy(); // 空結果沒有被快取
   });
 });
+
+describe('子頁面自動成為章節', () => {
+  const home = {
+    type: 'content', url: 'https://ocw.aca.ntu.edu.tw/courses/100S111', title: '微積分 - 臺大開放式課程', heading: '微積分', lang: 'zh-Hant',
+    headings: [], paras: ['本課程介紹微積分的基本概念與應用。'], frames: [], videos: [],
+    links: [
+      { href: 'https://ocw.aca.ntu.edu.tw/courses/100S111/58', text: '第15章 向量場', section: '', nav: false },
+      { href: 'https://ocw.aca.ntu.edu.tw/courses/100S111/59', text: '第16章 向量微積分', section: '', nav: false },
+    ],
+  };
+
+  test('課程首頁底下有多個子頁面時顯示章節，點選時把清單一併交出', async () => {
+    const onOpenChapter = jest.fn();
+    const { getByTestId, getByText } = render(<ExtractScreen url={home.url} onClose={() => {}} onOpenPage={() => {}} onOpenChapter={onOpenChapter} onOpenSource={() => {}} />);
+    await send(getByTestId, home);
+    expect(getByText('章節 2')).toBeTruthy();
+    fireEvent.press(getByText('第16章 向量微積分'));
+    expect(onOpenChapter).toHaveBeenCalledWith(1, [
+      { title: '第15章 向量場', url: 'https://ocw.aca.ntu.edu.tw/courses/100S111/58', section: '單元' },
+      { title: '第16章 向量微積分', url: 'https://ocw.aca.ntu.edu.tw/courses/100S111/59', section: '單元' },
+    ]);
+  });
+
+  test('只有一個子頁面時不算章節', async () => {
+    const one = { ...home, links: home.links.slice(0, 1) };
+    const { getByTestId, queryByText } = render(<ExtractScreen url={home.url} onClose={() => {}} onOpenPage={() => {}} onOpenChapter={() => {}} onOpenSource={() => {}} />);
+    await send(getByTestId, one);
+    expect(queryByText(/^章節/)).toBeNull();
+  });
+});

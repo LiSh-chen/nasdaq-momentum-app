@@ -120,7 +120,7 @@ describe('多章節課程', () => {
     const { getByText } = withChapters(0, onOpenChapter);
     fireEvent.press(getByText('章節 3'));
     fireEvent.press(getByText('Lesson 2'));
-    expect(onOpenChapter).toHaveBeenCalledWith(2);
+    expect(onOpenChapter).toHaveBeenCalledWith(2, chapters); // 一併傳出章節清單，供上一章／下一章使用
     expect(getByText('影片 2')).toBeTruthy(); // 同一頁的影片、講義分頁仍在
     expect(getByText('講義 2')).toBeTruthy();
   });
@@ -131,7 +131,7 @@ describe('多章節課程', () => {
     expect(mid.getByText('2 / 3')).toBeTruthy();
     fireEvent.press(mid.getByText('下一章 →'));
     fireEvent.press(mid.getByText('← 上一章'));
-    expect(onOpenChapter.mock.calls).toEqual([[2], [0]]);
+    expect(onOpenChapter.mock.calls).toEqual([[2, chapters], [0, chapters]]);
     mid.unmount();
 
     const first = withChapters(0, onOpenChapter);
@@ -176,4 +176,15 @@ test('資源頁型檔案：點開時先解析實際檔案網址，再於 App 內
   fireEvent.press(getByText('Problem Set 1'));
   const views = await findAllByTestId('webview');
   expect(views.map((v) => v.props.source.uri).filter(Boolean)[0]).toContain(encodeURIComponent('https://ocw.example.edu/static/ps1.pdf'));
+});
+
+test('課程首頁（尚未進入任何章節）有章節時預設顯示章節清單', () => {
+  const chapters = [
+    { title: '單元一', url: 'https://ocw.example.edu/c/1', section: '單元' },
+    { title: '單元二', url: 'https://ocw.example.edu/c/2', section: '單元' },
+  ];
+  const home = buildContent({ url: 'https://ocw.example.edu/c', title: 't', heading: '課', paras: ['本課程介紹基本概念與應用方式。'] });
+  const { getByText } = render(<CourseView content={home} chapters={chapters} onOpenChapter={() => {}} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
+  expect(getByText('單元一')).toBeTruthy();
+  expect(getByText('單元二')).toBeTruthy();
 });

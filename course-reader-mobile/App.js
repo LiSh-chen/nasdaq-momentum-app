@@ -62,7 +62,10 @@ function Shell() {
         chapterIndex={top.chapterIndex}
         onClose={pop}
         onOpenPage={(url) => push({ name: 'extract', url, course: top.course })}
-        onOpenChapter={(i) => replaceTop({ ...top, url: top.chapters[i].url, chapterIndex: i })}
+        onOpenChapter={(i, list) => {
+          const l = list ?? top.chapters;
+          replaceTop({ ...top, chapters: l, url: l[i].url, chapterIndex: i });
+        }}
         onOpenSource={(url) => push({ name: 'web', title: '原頁面', url })}
       />
     );

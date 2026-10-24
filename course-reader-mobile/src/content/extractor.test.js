@@ -145,3 +145,13 @@ test('回傳頁面上的表單與輸入欄位，供判斷網站的搜尋方式',
     { action: 'https://x.edu/login', method: 'post', inputs: [{ name: 'u', type: 'text', placeholder: '' }, { name: 'p', type: 'password', placeholder: '' }] },
   ]);
 });
+
+test('連結內的圖片網址一併回傳（用於課程卡片縮圖），佔位圖不算', () => {
+  const raw = extract(`<html><head><title>t</title></head><body><main>
+    <a href="/courses/A"><img src="/img/a.jpg" alt="甲"></a>
+    <a href="/courses/B"><img src="data:image/gif;base64,R0lGOD" data-src="https://cdn.example.edu/b.jpg"></a>
+    <a href="/courses/C"><img src="data:image/gif;base64,R0lGOD"></a>
+    <a href="/courses/D">純文字</a></main></body></html>`);
+  const img = Object.fromEntries(raw.links.map((l) => [l.href.split('/').pop(), l.image]));
+  expect(img).toEqual({ A: 'https://ocw.example.edu/img/a.jpg', B: 'https://cdn.example.edu/b.jpg', C: '', D: '' });
+});

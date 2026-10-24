@@ -149,6 +149,28 @@ export function buildContent(raw) {
   const generic = videos.filter((v) => GENERIC_PLAYER.test(v.title));
   generic.forEach((v, i) => { v.title = pageTitle ? (generic.length > 1 ? `${pageTitle} ${i + 1}` : pageTitle) : v.title; });
 
+  // 頁面正下一層的子頁面（如臺大 /courses/代碼/單元編號、耶魯 /系所/課號/lecture-N）視為章節
+  const children = [];
+  try {
+    const base = new URL(raw.url);
+    const root = base.pathname.replace(/\/+$/, '');
+    const childSeen = new Set();
+    for (const l of raw.links ?? []) {
+      const text = clean(l.text);
+      if (l.nav || !text) continue;
+      let u;
+      try { u = new URL(l.href); } catch { continue; }
+      if (u.hostname !== base.hostname || !u.pathname.startsWith(`${root}/`)) continue;
+      const segs = u.pathname.slice(root.length + 1).split('/').filter(Boolean);
+      if (segs.length !== 1 || segs[0].includes('.')) continue;
+      const href = `${u.origin}${u.pathname}`;
+      if (childSeen.has(href) || videoFrom(href)) continue;
+      childSeen.add(href);
+      children.push({ title: text, url: href, section: '單元' });
+      if (children.length >= 200) break;
+    }
+  } catch {}
+
   const outline = (raw.headings ?? []).map((h) => ({ level: h.level, text: clean(h.text) })).filter((h) => h.text);
   // 太短的多半是按鈕或選單文字；中文資訊密度高，門檻訂為 8 個字以保留「授課教師：王大明」這類短資訊
 const overview = [...new Set((raw.paras ?? []).map(clean).filter((s) => s.length >= 8 && !/[«»]/.test(s) && !/^(previous|next)\b/i.test(s) && !CODEISH.test(s)))].slice(0, 12);
@@ -162,6 +184,7 @@ const overview = [...new Set((raw.paras ?? []).map(clean).filter((s) => s.length
     videos,
     materials,
     related,
+    children,
   };
 }
 
