@@ -1,42 +1,16 @@
-name: Probe course sources
+name: Live check course sources
 on:
   push:
-    paths: ['.github/workflows/probe.yml']
+    paths: ['.github/workflows/probe.yml', 'course-reader-mobile/scripts/live-check.mjs', 'course-reader-mobile/src/api/**']
+  workflow_dispatch:
 jobs:
-  probe:
+  live:
     runs-on: ubuntu-latest
     steps:
-      - name: probe
-        run: |
-          B=https://api.learn.mit.edu/api/v1
-          g(){ curl -sL -m 30 -A "Mozilla/5.0" "$1"; }
-          echo "##### search endpoint with facets"
-          g "$B/learning_resources_search/?q=physics&resource_type=course&offered_by=ocw&aggregations=topic&aggregations=level&aggregations=department&aggregations=offered_by&limit=1" | jq -c '{count, meta_keys:(.metadata|keys), agg:(.metadata.aggregations|with_entries(.value|=.[0:6]))}' | head -c 3000
-          echo; echo "##### filter params: counts"
-          for q in "resource_type=course&offered_by=ocw" "resource_type=course&offered_by=ocw&level=undergraduate" "resource_type=course&offered_by=ocw&topic=Physics" "resource_type=course&offered_by=ocw&department=8" "resource_type=course&offered_by=ocw&free=true" "resource_type=course&offered_by=ocw&sortby=-views" "resource_type=course&offered_by=ocw&course_feature=Lecture%20Videos"; do echo "$q -> $(g "$B/learning_resources_search/?$q&limit=1" | jq -c '{count,first:.results[0].title}')"; done
-          echo "##### offered_by values"; g "$B/learning_resources_search/?resource_type=course&aggregations=offered_by&limit=1" | jq -c '.metadata.aggregations.offered_by[0:15]'
-          U=https://ocw.mit.edu/courses/8-01sc-classical-mechanics-fall-2016
-          echo "##### course home: internal links"; g $U/ | python3 -c "
-          import re,sys
-          h=sys.stdin.read()
-          for m in sorted(set(re.findall(r'href=\"(/courses/8-01sc[^\"#]*)\"[^>]*>([^<]{0,60})',h)))[:30]: print(m)
-          print('--- has <main>:', '<main' in h, ' len', len(h))
-          i=h.find('id=\"course-description')
-          print(h[i:i+600] if i>0 else 'no course-description')
-          "
-          echo "##### lecture-videos page links"; g $U/video_galleries/lecture-videos/ | grep -oE 'href="[^"]*resources[^"]*"' | sort -u | head -6
-          echo "##### one video resource page"; R=$(g $U/video_galleries/lecture-videos/ | grep -oE '/courses/8-01sc[^"]*/resources/[^"]*' | head -1); echo "R=$R"
-          g https://ocw.mit.edu$R | python3 -c "
-          import re,sys
-          h=sys.stdin.read()
-          print('len',len(h))
-          for pat in [r'(https?://[^\"\' ]*youtube[^\"\' ]*)',r'(https?://[^\"\' ]*archive\.org[^\"\' ]*)',r'(https?://[^\"\' ]*\.(?:mp4|pdf|vtt)[^\"\' ]*)',r'data-youtube[^=]*=\"([^\"]*)\"',r'youtube_id[^,]{0,60}']:
-              print(pat[:25],'=>',sorted(set(re.findall(pat,h)))[:6])
-          i=h.find('<h1'); print(h[i:i+500])
-          "
-          echo "##### a regular content page"; g $U/pages/syllabus/ | python3 -c "
-          import re,sys
-          h=sys.stdin.read()
-          i=h.find('id=\"main-content'); print('main-content idx',i)
-          print(re.sub(r'\s+',' ',h[i:i+1200]))
-          "
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: live check against real MIT Learn API / OCW
+        working-directory: course-reader-mobile
+        run: node --experimental-default-type=module scripts/live-check.mjs
