@@ -6,6 +6,7 @@ on:
     branches: [claude/campus-course-reader-wmmoor]
     paths:
       - 'course-reader-mobile/**'
+      - '!course-reader-mobile/scripts/**'
       - '.github/workflows/build-android-apk.yml'
 
 jobs:
