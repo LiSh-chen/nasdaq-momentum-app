@@ -71,3 +71,12 @@ test('新來源的課程頁：整理器實際抓到什麼（耶魯、陽明交�
     console.log(`[${url}] tabs=${tabs.map((t) => `${t.label}:${t.count}`).join(' | ') || '(none)'}; related sample: ${content.related.slice(0, 8).map((r) => `${r.title}->${r.url.slice(-45)}`).join(' ; ')}; frames=${raw.frames.map((f) => f.src.slice(0, 60)).join(' , ')}`);
   }
 });
+
+test('耶魯：課程頁解析出講次，講次頁整理得出影片或逐字稿', async () => {
+  const pages = flattenOutline(await fetchOutline('https://oyc.yale.edu/astronomy/astr-160'));
+  console.log(`yale lectures: ${pages.length}; first 3: ${pages.slice(0, 3).map((p) => `${p.title}->${p.url.slice(-30)}`).join(' ; ')}`);
+  expect(pages.length).toBeGreaterThanOrEqual(10);
+  expect(pages.every((p) => p.title && p.url.startsWith('https://oyc.yale.edu/astronomy/astr-160/'))).toBe(true);
+  const { tabs, content, raw } = await organize(pages[0].url);
+  console.log(`yale lecture page: tabs=${tabs.map((t) => `${t.label}:${t.count}`).join(' | ') || '(none)'}; frames=${raw.frames.map((f) => f.src.slice(0, 70)).join(' , ')}; videoLinks=${content.videos.length}; links=${raw.links.length}`);
+});

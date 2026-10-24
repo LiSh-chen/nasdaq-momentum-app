@@ -46,7 +46,7 @@ export function toCourse(c) {
     features: ['Lecture Videos'],
     free: true,
     requiresLogin: false,
-    unified: false,
+    unified: true, // 有講次目錄可用（見 ocw.js 的 parseYaleOutline）
   };
 }
 

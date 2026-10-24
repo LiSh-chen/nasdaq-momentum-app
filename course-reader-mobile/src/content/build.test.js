@@ -180,11 +180,24 @@ describe('陽明交大等真實頁面暴露的情況', () => {
   test('相關頁面的連結文字太籠統（如「線上觀看」）時，用所在區塊的標題區分', () => {
     const c = buildContent(page({
       links: [
-        { href: 'https://ocw.nycu.edu.tw/?post_type=course_page&p=1', text: '線上觀看', section: '第一週 極限' },
-        { href: 'https://ocw.nycu.edu.tw/?post_type=course_page&p=2', text: '線上觀看', section: '第二週 導數' },
-        { href: 'https://ocw.nycu.edu.tw/?post_type=course_page&p=3', text: '線上觀看', section: '' },
+        { href: 'https://ocw.nycu.edu.tw/?post_type=course_page&p=1', text: '線上觀看', section: '微積分', context: '第一週 極限' },
+        { href: 'https://ocw.nycu.edu.tw/?post_type=course_page&p=2', text: '線上觀看', section: '微積分', context: '第二週 導數' },
+        { href: 'https://ocw.nycu.edu.tw/?post_type=course_page&p=3', text: '線上觀看', section: '微積分' },
       ],
     }));
-    expect(c.related.map((r) => r.title)).toEqual(['第一週 極限・線上觀看', '第二週 導數・線上觀看', '線上觀看']);
+    // 優先用同一列的文字（哪一週），其次用所在區塊標題
+    expect(c.related.map((r) => r.title)).toEqual(['第一週 極限・線上觀看', '第二週 導數・線上觀看', '微積分・線上觀看']);
   });
+});
+
+test('檔名就是頁面上某部影片的代碼時，視為該影片的逐字稿', () => {
+  const c = buildContent({
+    url: 'https://ocw.example.edu/c/p/', title: 't',
+    frames: [{ src: 'https://www.youtube.com/embed/F3N5EkMX_ks', title: 'Course Introduction', section: '' }],
+    links: [
+      { href: 'https://ocw.example.edu/c/F3N5EkMX_ks.pdf', text: 'English', section: '' },
+      { href: 'https://ocw.example.edu/c/notes.pdf', text: '講義', section: '' },
+    ],
+  });
+  expect(c.materials.map((m) => [m.title, m.category])).toEqual([['Course Introduction（逐字稿）', 'lecture'], ['講義', 'lecture']]);
 });

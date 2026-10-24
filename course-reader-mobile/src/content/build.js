@@ -45,9 +45,12 @@ export function titleFromUrl(url) {
 const HASHY = /^[0-9a-f]{16,}$/i;
 const isHashy = (s) => HASHY.test(s.replace(/[\s_-]+/g, ''));
 
-function titleOf(text, url, section = '') {
+function titleOf(text, url, section = '', context = '') {
   const t = clean(text);
   if (t && !GENERIC_TEXT.test(t)) return t;
+  // 連結文字籠統（下載、English…）時，優先用同一列的說明文字
+  const ctx = clean(context);
+  if (ctx && ctx.length <= 60 && !isHashy(ctx)) return ctx;
   const fromUrl = titleFromUrl(url);
   if (fromUrl && !isHashy(fromUrl)) return fromUrl;
   const sec = clean(section);
@@ -85,7 +88,7 @@ export function buildContent(raw) {
   for (const l of raw.links ?? []) {
     // 頁面已有嵌入的影片時，「下載影片」連結只是同一部影片的檔案，不另列
     if (hasEmbedded && /download|下載/i.test(l.text)) continue;
-    addVideo(l.href, GENERIC_TEXT.test(clean(l.text)) ? titleOf(l.text, l.href, l.section) : l.text, l.section);
+    addVideo(l.href, GENERIC_TEXT.test(clean(l.text)) ? titleOf(l.text, l.href, l.section, l.context) : l.text, l.section);
   }
 
   const materials = [];
@@ -98,12 +101,12 @@ export function buildContent(raw) {
     let ext = extOf(l.href);
     let title;
     if (direct) {
-      title = titleOf(text, l.href, l.section);
+      title = titleOf(text, l.href, l.section, l.context);
     } else {
       // 資源頁：翻頁連結、選單、影片頁不算；其餘要有檔案類型提示，或能從文字／區塊歸類才算檔案
       if (l.nav || PAGER.test(text)) continue;
       const hint = (text.match(EXT_HINT) || l.href.match(/_(pdf|pptx?|docx?|xlsx?|zip)\/?$/i) || [])[1];
-      title = titleOf(text.replace(EXT_HINT_PAREN, ''), l.href, l.section);
+      title = titleOf(text.replace(EXT_HINT_PAREN, ''), l.href, l.section, l.context);
       const cat = classifyMaterial({ title, section: l.section, url: l.href });
       if (!hint && (cat === 'other' || VIDEO_WORDS.test(`${text} ${l.section}`))) continue;
       ext = hint ? hint.toLowerCase() : 'file';
@@ -114,6 +117,15 @@ export function buildContent(raw) {
       resolve: isResource && !direct, // 資源頁：點開時再取得實際的檔案網址
       category: classifyMaterial({ title, section: l.section, url: l.href }),
     });
+  }
+
+  // 檔名就是頁面上某部影片的代碼（如 F3N5EkMX_ks.pdf）：那是這部影片的逐字稿
+  const norm = (x) => x.replace(/[-_]/g, '').toLowerCase();
+  for (const m of materials) {
+    if (m.resolve) continue;
+    const base = decodeURIComponent(m.url.split(/[?#]/)[0].split('/').pop() || '').replace(/\.[a-z0-9]{2,4}$/i, '');
+    const v = base && videos.find((x) => x.kind === 'youtube' && norm(x.ref) === norm(base));
+    if (v) { m.title = `${v.title}（逐字稿）`; m.category = 'lecture'; }
   }
 
   // 同網站、不是檔案也不是影片的連結，視為相關頁面（可再整理）
@@ -127,7 +139,7 @@ export function buildContent(raw) {
     if (l.nav || hostOf(u) !== host || !text || text.length > 60) continue;
     if (MATERIAL_EXT.test(u) || RESOURCE_PAGE.test(u) || videoFrom(u) || u.replace(/\/+$/, '') === here || relSeen.has(u)) continue;
     relSeen.add(u);
-    related.push({ id: u, title: VAGUE_LINK.test(text) && clean(l.section) ? `${clean(l.section)}・${text}` : text, url: u });
+    related.push({ id: u, title: VAGUE_LINK.test(text) && (clean(l.context) || clean(l.section)) ? `${clean(l.context) || clean(l.section)}・${text}` : text, url: u });
     if (related.length >= 40) break;
   }
 

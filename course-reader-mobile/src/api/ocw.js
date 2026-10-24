@@ -58,6 +58,29 @@ export function parseOutline(html, courseUrl) {
   return [...sections.values()];
 }
 
+// 耶魯開放課程：課程頁上各講次連結是 /系所/課號/lecture-N，與分頁標籤（quicktabs）、檔案區分開
+export function parseYaleOutline(html, courseUrl) {
+  const base = new URL(courseUrl);
+  const root = base.pathname.replace(/\/+$/, '');
+  const items = [];
+  const seen = new Set();
+  for (const m of html.matchAll(/<a\b[^>]*?href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)) {
+    let url;
+    try { url = new URL(decode(m[1]), base); } catch { continue; }
+    url.hash = '';
+    url.search = '';
+    if (url.hostname !== base.hostname || !url.pathname.startsWith(`${root}/`)) continue;
+    const segs = url.pathname.slice(root.length + 1).split('/').filter(Boolean);
+    if (segs.length !== 1 || segs[0].includes('.')) continue; // 只要正下一層、不是檔案
+    const title = textOf(m[2]);
+    const href = url.toString();
+    if (!title || seen.has(href)) continue;
+    seen.add(href);
+    items.push({ title, url: href });
+  }
+  return items.length ? [{ key: 'lectures', title: '課程講次', url: null, items }] : [];
+}
+
 // 攤平成閱讀順序：章節首頁（若有）接著底下的單元
 export function flattenOutline(sections) {
   const pages = [];
@@ -74,7 +97,8 @@ export async function fetchOutline(courseUrl, fetchImpl = fetch) {
   if (cache.has(courseUrl)) return cache.get(courseUrl);
   const res = await fetchImpl(courseUrl);
   if (!res.ok) throw new Error(`OCW ${res.status}`);
-  const sections = parseOutline(await res.text(), courseUrl);
+  const parse = new URL(courseUrl).hostname === 'oyc.yale.edu' ? parseYaleOutline : parseOutline;
+  const sections = parse(await res.text(), courseUrl);
   cache.set(courseUrl, sections);
   return sections;
 }

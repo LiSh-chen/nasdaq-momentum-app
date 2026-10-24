@@ -48,6 +48,14 @@ export const EXTRACT_JS = `
       return '';
     }
 
+    // 連結所在那一列的文字（如表格列的「第一週 極限」），用來辨識「線上觀看」這種籠統的連結
+    function rowText(a) {
+      var row = a.closest ? a.closest('tr,li,dd,p') : null;
+      if (!row || row === root) return '';
+      var t = text(row).replace(text(a), '').replace(/\\s+/g, ' ').trim();
+      return t.length > 80 ? t.slice(0, 80) : t;
+    }
+
     var headings = [].slice.call(root.querySelectorAll('h1,h2,h3,h4')).filter(function (e) { return !inChrome(e); }).map(function (e) {
       return { level: Number(e.tagName.charAt(1)), text: text(e) };
     }).filter(function (h) { return h.text; }).slice(0, 80);
@@ -75,7 +83,7 @@ export const EXTRACT_JS = `
     }).filter(function (v) { return v.src; });
 
     var links = [].slice.call(document.querySelectorAll('a[href]')).map(function (a) {
-      return { href: abs(a.getAttribute('href')), text: text(a), section: sectionOf(a), nav: inChrome(a) };
+      return { href: abs(a.getAttribute('href')), text: text(a), section: sectionOf(a), context: rowText(a), nav: inChrome(a) };
     }).filter(function (l) { return /^https?:/.test(l.href); }).slice(0, 800);
 
     var h1 = document.querySelector('h1');

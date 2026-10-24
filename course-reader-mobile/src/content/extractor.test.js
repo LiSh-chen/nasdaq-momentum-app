@@ -116,3 +116,12 @@ test('延遲載入的 iframe：src 是佔位圖時改用 data-src，並略過非
   </main></body></html>`);
   expect(raw.frames.map((f) => f.src)).toEqual(['https://www.youtube.com/embed/dQw4w9WgXcQ', 'https://player.vimeo.com/video/76979871']);
 });
+
+test('連結同一列的文字（如週次）會一併回傳，供籠統的連結文字辨識', () => {
+  const raw = extract(`<html><head><title>t</title></head><body><main><table>
+    <tr><td>第一週 極限</td><td><a href="/watch/1">線上觀看</a></td></tr>
+    <tr><td>第二週 導數</td><td><a href="/watch/2">線上觀看</a></td></tr></table>
+    <ul><li>講義三 <a href="/n3.pdf">下載</a></li></ul></main></body></html>`);
+  const ctx = Object.fromEntries(raw.links.map((l) => [l.href.split('/').pop(), l.context]));
+  expect(ctx).toEqual({ '1': '第一週 極限', '2': '第二週 導數', 'n3.pdf': '講義三' });
+});

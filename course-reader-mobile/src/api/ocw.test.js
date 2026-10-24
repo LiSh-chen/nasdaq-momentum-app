@@ -1,4 +1,4 @@
-import { fetchOutline, flattenOutline, parseOutline, sameUrl } from './ocw';
+import { fetchOutline, flattenOutline, parseOutline, parseYaleOutline, sameUrl } from './ocw';
 
 const COURSE = 'https://ocw.mit.edu/courses/8-01sc-classical-mechanics-fall-2016/';
 const R = '/courses/8-01sc-classical-mechanics-fall-2016';
@@ -58,4 +58,43 @@ test('fetchOutline 會快取同一門課', async () => {
   await fetchOutline(url, fetchImpl);
   await fetchOutline(url, fetchImpl);
   expect(fetchImpl).toHaveBeenCalledTimes(1);
+});
+
+describe('耶魯課程的講次', () => {
+  const COURSE_Y = 'https://oyc.yale.edu/astronomy/astr-160';
+  // 結構取自 oyc.yale.edu 課程頁：分頁標籤 (quicktabs) 與各講次連結
+  const YALE = `
+  <a href="/quicktabs/nojs/course_quicktabs/0">ABOUT</a><a href="/quicktabs/nojs/course_quicktabs/2">SESSIONS</a>
+  <a href="/astronomy">Astronomy</a><a href="/astronomy/astr-160">Frontiers and Controversies in Astrophysics</a>
+  <a href="https://oyc.yale.edu/astronomy/astr-160/lecture-1">Introduction</a>
+  <a href="/astronomy/astr-160/lecture-2"> Planetary&nbsp;Orbits </a>
+  <a href="/astronomy/astr-160/lecture-2">重複</a>
+  <a href="/astronomy/astr-160/lecture-10">Exoplanets &amp; Transits</a>
+  <a href="/astronomy/astr-160/sites/default/files/paper.pdf">不是講次</a>
+  <a href="/astronomy/other-course/lecture-1">別的課</a>
+  <a href="/astronomy/astr-160/lecture-3"></a>`;
+
+  test('只取該課程底下的各講次，依出現順序，去重並解碼', () => {
+    const s = parseYaleOutline(YALE, COURSE_Y);
+    expect(s).toHaveLength(1);
+    expect(s[0]).toMatchObject({ key: 'lectures', title: '課程講次', url: null });
+    expect(s[0].items.map((i) => i.title)).toEqual(['Introduction', 'Planetary Orbits', 'Exoplanets & Transits']);
+    expect(s[0].items[0].url).toBe('https://oyc.yale.edu/astronomy/astr-160/lecture-1');
+  });
+
+  test('攤平成閱讀順序，每章都帶有所屬區塊', () => {
+    const pages = flattenOutline(parseYaleOutline(YALE, COURSE_Y));
+    expect(pages.map((p) => p.title)).toEqual(['Introduction', 'Planetary Orbits', 'Exoplanets & Transits']);
+    expect(pages[0].section).toBe('課程講次');
+  });
+
+  test('沒有講次時回傳空陣列', () => {
+    expect(parseYaleOutline('<a href="/astronomy">Astronomy</a>', COURSE_Y)).toEqual([]);
+  });
+
+  test('fetchOutline 依網站選擇解析方式', async () => {
+    const f = jest.fn().mockResolvedValue({ ok: true, text: async () => YALE });
+    const s = await fetchOutline(COURSE_Y + '?t=1', f);
+    expect(s[0].items).toHaveLength(3);
+  });
 });

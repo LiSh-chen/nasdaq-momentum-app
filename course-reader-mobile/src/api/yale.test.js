@@ -31,7 +31,7 @@ test('解析課程列表：名稱、系所、課號、教授、學期，並去�
 test('轉成統一的課程格式（免登入、有講課影片）', () => {
   const c = toCourse(parseYaleListing(HTML)[1]);
   expect(c).toMatchObject({
-    id: 'yale:astronomy/astr-160', sourceCode: 'yale', sourceName: 'Open Yale Courses', free: true, requiresLogin: false,
+    id: 'yale:astronomy/astr-160', sourceCode: 'yale', sourceName: 'Open Yale Courses', free: true, requiresLogin: false, unified: true,
     instructors: ['Charles Bailyn'], topics: ['Astronomy'], features: ['Lecture Videos'],
   });
   expect(c.description).toContain('ASTR 160');
