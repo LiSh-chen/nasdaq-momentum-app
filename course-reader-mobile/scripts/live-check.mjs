@@ -26,12 +26,13 @@ check(page2.items[0].id !== def.items[0].id && page2.hasMore, '分頁 offset=20 
 const mitx = await searchCourses({ offeredBy: 'mitx' });
 check(mitx.items.length > 0 && mitx.items.every((c) => !c.unified), `MITx：${mitx.count} 門，皆為網頁開啟`);
 
-const ocw = await searchCourses({ q: 'classical mechanics 8.01', offeredBy: 'ocw' });
-const target = ocw.items.find((c) => c.url.includes('8-01sc')) ?? ocw.items[0];
-const tryOutline = async (c) => { const o = await fetchOutline(c.url); return { c, o, pages: flattenOutline(o) }; };
-let picked = await tryOutline(target);
-// 搜尋結果未必是大型課程；挑第一門頁面數夠多的來驗證
-for (const c of ocw.items) { if (picked.pages.length >= 10) break; picked = await tryOutline(c); }
+// 搜尋結果裡常是頁面很少的短期課程；另以一門內容豐富的已知課程驗證章節解析
+const SMALL = (await searchCourses({ q: 'weather climate', offeredBy: 'ocw' })).items[0];
+const small = flattenOutline(await fetchOutline(SMALL.url));
+check(small.length >= 1, `搜尋結果中的一般課程「${SMALL.title}」解析出 ${small.length} 頁`);
+const picked = { c: { title: '8.01SC Classical Mechanics', url: 'https://ocw.mit.edu/courses/8-01sc-classical-mechanics-fall-2016/' } };
+picked.o = await fetchOutline(picked.c.url);
+picked.pages = flattenOutline(picked.o);
 const outline = picked.o;
 const pages = picked.pages;
 console.log('  測試課程:', picked.c.title, picked.c.url);
