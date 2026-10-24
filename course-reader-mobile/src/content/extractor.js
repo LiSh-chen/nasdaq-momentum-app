@@ -13,9 +13,24 @@ export const EXTRACT_JS = `
     var text = function (e) { return (e.textContent || '').replace(/\\s+/g, ' ').trim(); };
     var root = document.querySelector('#course-main-content, main, article, [role=main], #content, .content') || document.body;
     var isHeading = function (e) { return e && /^H[1-6]$/.test(e.tagName); };
-    // 選單、側欄、頁首頁尾等版面元素，不算課程內容
-    var CHROME = 'nav,aside,header,footer,[role=navigation],[class*=nav i],[id*=nav i],[class*=menu i],[id*=menu i],[class*=sidebar i],[class*=breadcrumb i]';
-    var inChrome = function (e) { return Boolean(e.closest && e.closest(CHROME)); };
+    // 選單、側欄、頁尾等版面元素，不算課程內容。
+    // 只檢查「內容根節點以內」的祖先：外層包裝容器即使 class 帶有 nav／menu 字樣，也不會誤傷整頁內容。
+    var CHROME_CLASS = /(^|[-_])(nav|navbar|navigation|menu|sidebar|breadcrumbs?)([-_]|$)/;
+    var isChromeEl = function (n) {
+      var tag = n.tagName;
+      if (/^(NAV|ASIDE|FOOTER)$/.test(tag)) return true;
+      if (tag === 'HEADER' && root === document.body) return true; // 找不到內容區塊時，頁首才算版面
+      var role = (n.getAttribute && n.getAttribute('role')) || '';
+      if (/navigation|banner|complementary|contentinfo/.test(role)) return true;
+      var tokens = (((n.getAttribute && n.getAttribute('class')) || '') + ' ' + (n.id || '')).toLowerCase().split(/\\s+/);
+      return tokens.some(function (t) { return CHROME_CLASS.test(t); });
+    };
+    var inChrome = function (e) {
+      for (var n = e; n && n !== root && n !== document.body; n = n.parentElement) {
+        if (isChromeEl(n)) return true;
+      }
+      return false;
+    };
 
     // 往上、往前找最近的標題，作為這個項目的「所在區塊」
     function sectionOf(el) {
@@ -42,9 +57,17 @@ export const EXTRACT_JS = `
       return s.length >= 8 && s.length < 600;
     }).slice(0, 60);
 
+    // 延遲載入的 iframe：src 只是佔位（data:／about:blank），真正的網址在 data-src 等屬性
+    var frameSrc = function (e) {
+      var src = e.getAttribute('src') || '';
+      if (!src || /^(data:|about:)/i.test(src)) {
+        src = e.getAttribute('data-src') || e.getAttribute('data-lazy-src') || e.getAttribute('data-lazy') || e.getAttribute('data-original') || src;
+      }
+      return abs(src);
+    };
     var frames = [].slice.call(document.querySelectorAll('iframe')).map(function (e) {
-      return { src: abs(e.getAttribute('src') || e.getAttribute('data-src') || ''), title: e.title || '', section: sectionOf(e) };
-    }).filter(function (f) { return f.src; });
+      return { src: frameSrc(e), title: e.title || '', section: sectionOf(e) };
+    }).filter(function (f) { return /^https?:/.test(f.src); });
 
     var videos = [].slice.call(document.querySelectorAll('video')).map(function (v) {
       var s = v.currentSrc || v.src || ((v.querySelector('source') || {}).src) || '';

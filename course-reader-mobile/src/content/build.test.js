@@ -160,3 +160,31 @@ test('檔名是雜湊時改用連結文字或所在區塊當標題', () => {
   });
   expect(c.materials.map((m) => m.title)).toEqual(['lecture', 'Lecture Transcript（English）', 'PDF 檔案']);
 });
+
+describe('陽明交大等真實頁面暴露的情況', () => {
+  const page = (extra) => ({ url: 'https://ocw.nycu.edu.tw/?course_page=all-course/x/y/z', title: 't', ...extra });
+
+  test('標題去掉站名後綴', () => {
+    expect(buildContent(page({ title: '微積分甲(二) | 應用數學系 蘇承芳老師 - NYCU OCW' })).title).toBe('微積分甲(二) | 應用數學系 蘇承芳老師');
+    expect(buildContent(page({ title: 'Syllabus | MIT OpenCourseWare' })).title).toBe('Syllabus');
+    expect(buildContent(page({ title: '一個沒有後綴的標題' })).title).toBe('一個沒有後綴的標題');
+    expect(buildContent(page({ title: 'Intro - Part 2 of the long running lecture series on physics' })).title).toBe('Intro - Part 2 of the long running lecture series on physics');
+    expect(buildContent(page({ heading: '微積分', title: '微積分 - NYCU OCW' })).title).toBe('微積分'); // 有 h1 就用 h1
+  });
+
+  test('說明文字排除 CSS／程式碼片段', () => {
+    const c = buildContent(page({ paras: ['.。 {<br /> font-size: 18px;<br /> }', 'body { margin: 0; padding: 0 }', '本課程介紹微積分的基本概念。'] }));
+    expect(c.overview).toEqual(['本課程介紹微積分的基本概念。']);
+  });
+
+  test('相關頁面的連結文字太籠統（如「線上觀看」）時，用所在區塊的標題區分', () => {
+    const c = buildContent(page({
+      links: [
+        { href: 'https://ocw.nycu.edu.tw/?post_type=course_page&p=1', text: '線上觀看', section: '第一週 極限' },
+        { href: 'https://ocw.nycu.edu.tw/?post_type=course_page&p=2', text: '線上觀看', section: '第二週 導數' },
+        { href: 'https://ocw.nycu.edu.tw/?post_type=course_page&p=3', text: '線上觀看', section: '' },
+      ],
+    }));
+    expect(c.related.map((r) => r.title)).toEqual(['第一週 極限・線上觀看', '第二週 導數・線上觀看', '線上觀看']);
+  });
+});

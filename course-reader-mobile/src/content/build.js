@@ -16,6 +16,17 @@ const EXT_HINT = /\b(pdf|pptx?|docx?|xlsx?|zip)\b/i;
 const EXT_HINT_PAREN = /\s*[(\[（]\s*(pdf|pptx?|docx?|xlsx?|zip)\s*[)\]）]/i;
 const PAGER = /^[«»‹›<>|\s]*(previous|next|prev|上一[頁章篇]?|下一[頁章篇]?)[«»‹›<>|\s]*$/i;
 const VIDEO_WORDS = /video|影片|mp4/i;
+// 連結文字太籠統，單看分不出是哪一頁
+const VAGUE_LINK = /^(線上觀看|觀看|觀看影片|立即觀看|下載|點此|點我|詳細內容|詳情|更多|更多內容|閱讀更多|連結|watch( now| online)?|view( more)?|more|details?|read more|click here|link)$/i;
+// 看起來是 CSS／程式碼的文字，不是課程說明
+const CODEISH = /[{}][^]*;|\b(font-size|margin|padding|display|color)\s*:/i;
+
+// 標題結尾常附上站名（「課程名 - NYCU OCW」「Syllabus | MIT OpenCourseWare」），去掉較短的最後一段
+export function cleanTitle(title) {
+  const t = clean(title);
+  const m = t.match(/^(.*\S)\s+[-–—|]\s+([^-–—|]{1,24})$/);
+  return m && m[1].length >= 2 ? m[1] : t;
+}
 // 連結文字沒有意義時（語言名稱、download、檔案大小…），改用檔名當標題
 const GENERIC_TEXT = /^(english|chinese|中文|繁體中文|简体中文|download( the)?( video| file| pdf)?|下載|view|pdf|video( \d+(\.\d+)? ?[kmg]b)?|here|link|more|read more|click here)$/i;
 
@@ -116,17 +127,17 @@ export function buildContent(raw) {
     if (l.nav || hostOf(u) !== host || !text || text.length > 60) continue;
     if (MATERIAL_EXT.test(u) || RESOURCE_PAGE.test(u) || videoFrom(u) || u.replace(/\/+$/, '') === here || relSeen.has(u)) continue;
     relSeen.add(u);
-    related.push({ id: u, title: text, url: u });
+    related.push({ id: u, title: VAGUE_LINK.test(text) && clean(l.section) ? `${clean(l.section)}・${text}` : text, url: u });
     if (related.length >= 40) break;
   }
 
   const outline = (raw.headings ?? []).map((h) => ({ level: h.level, text: clean(h.text) })).filter((h) => h.text);
   // 太短的多半是按鈕或選單文字；中文資訊密度高，門檻訂為 8 個字以保留「授課教師：王大明」這類短資訊
-const overview = [...new Set((raw.paras ?? []).map(clean).filter((s) => s.length >= 8 && !/[«»]/.test(s) && !/^(previous|next)\b/i.test(s)))].slice(0, 12);
+const overview = [...new Set((raw.paras ?? []).map(clean).filter((s) => s.length >= 8 && !/[«»]/.test(s) && !/^(previous|next)\b/i.test(s) && !CODEISH.test(s)))].slice(0, 12);
 
   return {
     url: raw.url,
-    title: clean(raw.heading) || clean(raw.title) || raw.url,
+    title: clean(raw.heading) || cleanTitle(raw.title ?? '') || raw.url,
     source: host,
     outline,
     overview,

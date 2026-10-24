@@ -76,3 +76,43 @@ test('排除選單與側欄：說明文字不含選單項目，選單連結標�
   expect(raw.links.find((l) => l.href.endsWith('/week-1/')).nav).toBe(true);
   expect(raw.links.find((l) => l.href.endsWith('/extra/')).nav).toBe(false);
 });
+
+describe('版面判斷不能誤傷內容', () => {
+  test('內容外層的容器 class 帶有 nav／menu 字樣時，內容仍要保留', () => {
+    const raw = extract(`<html><head><title>t</title></head><body class="has-navigation menu-open">
+      <div class="layout-container with-sidebar-menu"><main>
+        <h1>Astronomy</h1><h2>Course Description</h2>
+        <p>This course covers the frontiers of modern astrophysics research.</p>
+        <a href="/astronomy/astr-160/lecture-1">Lecture 1</a>
+      </main></div></body></html>`);
+    expect(raw.headings.map((h) => h.text)).toEqual(['Astronomy', 'Course Description']);
+    expect(raw.paras).toHaveLength(1);
+    expect(raw.links.find((l) => l.href.endsWith('lecture-1')).nav).toBe(false);
+  });
+
+  test('文章內的 <header> 不是版面，裡面的標題要保留', () => {
+    const raw = extract('<html><head><title>t</title></head><body><article><header><h1>課程名稱</h1></header><p>本課程介紹基本概念與應用方式。</p></article></body></html>');
+    expect(raw.headings.map((h) => h.text)).toEqual(['課程名稱']);
+  });
+
+  test('真正的選單（nav 標籤、role、class 標記）仍被排除', () => {
+    const raw = extract(`<html><head><title>t</title></head><body><main>
+      <ul class="main-menu"><li><a href="/a">A</a></li></ul>
+      <div role="navigation"><a href="/b">B</a></div>
+      <div class="course-nav"><a href="/c">C</a></div>
+      <div class="navbar-top"><a href="/e">E</a></div>
+      <aside><a href="/d">D</a></aside>
+      <a href="/ok">內容連結</a></main></body></html>`);
+    const nav = Object.fromEntries(raw.links.map((l) => [l.href.split('/').pop(), l.nav]));
+    expect(nav).toEqual({ a: true, b: true, c: true, e: true, d: true, ok: false });
+  });
+});
+
+test('延遲載入的 iframe：src 是佔位圖時改用 data-src，並略過非網頁位址', () => {
+  const raw = extract(`<html><head><title>t</title></head><body><main>
+    <iframe src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" data-src="https://www.youtube.com/embed/dQw4w9WgXcQ" title="第一講"></iframe>
+    <iframe src="about:blank" data-lazy-src="https://player.vimeo.com/video/76979871"></iframe>
+    <iframe src="data:text/html;base64,AAAA"></iframe>
+  </main></body></html>`);
+  expect(raw.frames.map((f) => f.src)).toEqual(['https://www.youtube.com/embed/dQw4w9WgXcQ', 'https://player.vimeo.com/video/76979871']);
+});
