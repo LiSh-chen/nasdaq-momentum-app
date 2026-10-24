@@ -10,8 +10,12 @@ export const extOf = (url) => (url.split(/[?#]/)[0].match(/\.([a-z0-9]+)$/i)?.[1
 
 const clean = (s = '') => s.replace(/\s+/g, ' ').trim();
 
-// OCW 的檔案連到「資源頁」，網址結尾是檔案類型，如 /resources/problem-set-1_pdf/
-const RESOURCE_PAGE = /\/resources\/[^/?#]*_(pdf|pptx?|docx?|xlsx?|zip)\/?(?:[?#]|$)/i;
+// OCW 的講義、作業連到「資源頁」（/resources/<名稱>/），網址不一定帶副檔名，要靠連結文字與所在區塊判斷
+const RESOURCE_PAGE = /\/resources\/[^/?#]+\/?(?:[?#]|$)/i;
+const EXT_HINT = /\b(pdf|pptx?|docx?|xlsx?|zip)\b/i;
+const EXT_HINT_PAREN = /\s*[(\[（]\s*(pdf|pptx?|docx?|xlsx?|zip)\s*[)\]）]/i;
+const PAGER = /^[«»‹›<>|\s]*(previous|next|prev|上一[頁章篇]?|下一[頁章篇]?)[«»‹›<>|\s]*$/i;
+const VIDEO_WORDS = /video|影片|mp4/i;
 // 連結文字沒有意義時（語言名稱、download、檔案大小…），改用檔名當標題
 const GENERIC_TEXT = /^(english|chinese|中文|繁體中文|简体中文|download( the)?( video| file| pdf)?|下載|view|pdf|video( \d+(\.\d+)? ?[kmg]b)?|here|link|more|read more|click here)$/i;
 
@@ -63,13 +67,27 @@ export function buildContent(raw) {
   const materials = [];
   const matSeen = new Set();
   for (const l of raw.links ?? []) {
-    const page = l.href.match(RESOURCE_PAGE);
-    if ((!MATERIAL_EXT.test(l.href) && !page) || matSeen.has(l.href)) continue;
+    const direct = MATERIAL_EXT.test(l.href);
+    const isResource = RESOURCE_PAGE.test(l.href);
+    if ((!direct && !isResource) || matSeen.has(l.href)) continue;
+    const text = clean(l.text);
+    let ext = extOf(l.href);
+    let title;
+    if (direct) {
+      title = titleOf(text, l.href);
+    } else {
+      // 資源頁：翻頁連結、選單、影片頁不算；其餘要有檔案類型提示，或能從文字／區塊歸類才算檔案
+      if (l.nav || PAGER.test(text)) continue;
+      const hint = (text.match(EXT_HINT) || l.href.match(/_(pdf|pptx?|docx?|xlsx?|zip)\/?$/i) || [])[1];
+      title = titleOf(text.replace(EXT_HINT_PAREN, ''), l.href);
+      const cat = classifyMaterial({ title, section: l.section, url: l.href });
+      if (!hint && (cat === 'other' || VIDEO_WORDS.test(`${text} ${l.section}`))) continue;
+      ext = hint ? hint.toLowerCase() : 'file';
+    }
     matSeen.add(l.href);
-    const title = titleOf(l.text, l.href);
     materials.push({
-      id: l.href, title, url: l.href, ext: page ? page[1].toLowerCase() : extOf(l.href), section: clean(l.section),
-      resolve: Boolean(page), // 資源頁：點開時再取得實際的檔案網址
+      id: l.href, title, url: l.href, ext, section: clean(l.section),
+      resolve: isResource && !direct, // 資源頁：點開時再取得實際的檔案網址
       category: classifyMaterial({ title, section: l.section, url: l.href }),
     });
   }
@@ -91,7 +109,7 @@ export function buildContent(raw) {
 
   const outline = (raw.headings ?? []).map((h) => ({ level: h.level, text: clean(h.text) })).filter((h) => h.text);
   // 太短的多半是按鈕或選單文字；中文資訊密度高，門檻訂為 8 個字以保留「授課教師：王大明」這類短資訊
-const overview = [...new Set((raw.paras ?? []).map(clean).filter((s) => s.length >= 8))].slice(0, 12);
+const overview = [...new Set((raw.paras ?? []).map(clean).filter((s) => s.length >= 8 && !/[«»]/.test(s) && !/^(previous|next)\b/i.test(s)))].slice(0, 12);
 
   return {
     url: raw.url,

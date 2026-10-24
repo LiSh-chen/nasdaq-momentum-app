@@ -102,18 +102,38 @@ describe('真實 OCW 頁面暴露的情況', () => {
     expect(c.videos.map((v) => v.title)).toEqual(['MIT8 01F16 Demo 02', '第三講']);
   });
 
-  test('OCW 資源頁連結視為檔案（點開時才解析實際網址），並用檔名當標題', () => {
+  test('OCW 資源頁連結視為檔案：靠「(PDF)」等提示判斷，標題去掉提示，點開時才解析實際網址', () => {
     const c = buildContent(page({
       links: [
-        { href: 'https://ocw.example.edu/courses/c1/resources/mit8_01scf16_ps01_pdf/', text: 'Problem Set 1', section: 'Assignments' },
+        { href: 'https://ocw.example.edu/courses/c1/resources/mit8_01f16_pset1_new/', text: 'Problem Set 1 (PDF)', section: 'Assignments' },
         { href: 'https://ocw.example.edu/courses/c1/resources/lec3_transcript_pdf/', text: 'English', section: 'Lecture 3' },
+        { href: 'https://ocw.example.edu/courses/c1/resources/solutions-1/', text: 'Solutions', section: 'Problem Set 1 Solutions' },
       ],
     }));
     expect(c.materials).toMatchObject([
       { title: 'Problem Set 1', ext: 'pdf', resolve: true, category: 'assignment' },
-      { title: 'lec3 transcript', ext: 'pdf', resolve: true, category: 'lecture' }, // 逐字稿歸講義
+      { title: 'lec3 transcript', ext: 'pdf', resolve: true, category: 'lecture' }, // 網址結尾 _pdf 也算提示；逐字稿歸講義
+      { title: 'Solutions', ext: 'file', resolve: true, category: 'assignment' }, // 沒提示但能從區塊歸類
     ]);
     expect(c.related).toEqual([]); // 資源頁不算相關頁面
+  });
+
+  test('資源頁連結中的翻頁、選單與影片頁不算檔案', () => {
+    const c = buildContent(page({
+      links: [
+        { href: 'https://ocw.example.edu/courses/c1/resources/ps-1-4/', text: 'Previous', section: '' },
+        { href: 'https://ocw.example.edu/courses/c1/resources/ps-1-6/', text: 'Next »', section: '' },
+        { href: 'https://ocw.example.edu/courses/c1/resources/lesson-1/', text: 'Lesson 1', section: 'Lecture Videos' },
+        { href: 'https://ocw.example.edu/courses/c1/resources/x/', text: 'Menu item', section: '', nav: true },
+        { href: 'https://ocw.example.edu/courses/c1/resources/misc/', text: '其他東西', section: '' },
+      ],
+    }));
+    expect(c.materials).toEqual([]);
+  });
+
+  test('說明文字排除翻頁列', () => {
+    const c = buildContent(page({ paras: ['« Previous | Next »', 'Next lesson is available soon', '本課程介紹基本概念與應用方式。'] }));
+    expect(c.overview).toEqual(['本課程介紹基本概念與應用方式。']); // 「Next lesson…」開頭也被視為翻頁文字
   });
 
   test('選單連結不列為相關頁面；有章節時不顯示相關頁面分頁', () => {

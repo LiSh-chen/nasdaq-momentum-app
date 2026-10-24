@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { FlatList, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { playerHtml, tabsOf, viewerUrl, youtubeWatchUrl } from '../content/build';
+import { extOf, playerHtml, tabsOf, viewerUrl, youtubeWatchUrl } from '../content/build';
 import { resolveFileUrl } from '../content/resolve';
 import { Btn, Chip, colors } from '../ui';
 
@@ -62,9 +62,9 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
     if (m.resolve) {
       const url = await resolveFileUrl(m.url).catch(() => null);
       if (!url) return Linking.openURL(m.url).catch(() => {});
-      target = { ...m, url };
+      target = { ...m, url, ext: extOf(url) || m.ext };
     }
-    return IN_APP_VIEW.test(m.ext) ? setFile(target) : Linking.openURL(target.url).catch(() => {});
+    return IN_APP_VIEW.test(target.ext) ? setFile(target) : Linking.openURL(target.url).catch(() => {});
   };
   const materials = (cat) => content.materials.filter((m) => m.category === cat);
 
