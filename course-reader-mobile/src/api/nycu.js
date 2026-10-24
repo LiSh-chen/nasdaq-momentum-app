@@ -49,10 +49,12 @@ export function parseNycuResults(html) {
   return items;
 }
 
-export async function searchNycu(query, page = 1, fetchImpl = fetch) {
+export async function searchNycu(query, page, fetchImpl = fetch) {
   if (!String(query ?? '').trim()) return { items: [], count: 0, next: null, facets: {} };
-  const html = await getText(buildNycuSearchUrl(query, page), fetchImpl);
+  const p = page || 1; // 0 或未提供都是第 1 頁
+  const url = buildNycuSearchUrl(query, p);
+  const html = await getText(url, fetchImpl);
   const items = parseNycuResults(html);
-  const hasMore = html.includes(`paged=${page + 1}`);
-  return { items, count: items.length, next: hasMore ? page + 1 : null, facets: {} };
+  const hasMore = html.includes(`paged=${p + 1}`);
+  return { items, count: items.length, next: hasMore ? p + 1 : null, facets: {}, meta: { url, bytes: html.length, parsed: items.length } };
 }

@@ -1,3 +1,4 @@
+import { tidyTitle } from '../text.js';
 import { CATEGORY_LABELS, classifyMaterial } from './classify';
 
 const YT_ID = /(?:youtube(?:-nocookie)?\.com\/(?:embed\/|watch\?(?:[^#]*&)?v=|v\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})(?![\w-])/;
@@ -18,6 +19,8 @@ const PAGER = /^[«»‹›<>|\s]*(previous|next|prev|上一[頁章篇]?|下一[
 const VIDEO_WORDS = /video|影片|mp4/i;
 // 連結文字太籠統，單看分不出是哪一頁
 const VAGUE_LINK = /^(線上觀看|觀看|觀看影片|立即觀看|下載|點此|點我|詳細內容|詳情|更多|更多內容|閱讀更多|連結|watch( now| online)?|view( more)?|more|details?|read more|click here|link)$/i;
+// 網站選單、頁尾、分頁等介面文字，不是內容
+const JUNK_LINK = /^(隱私權?政策|使用(者)?條款|版權(聲明)?|開始探索|探索課程|全部課程|高中專區|關於我們|認識我們|相關資源|聯絡我們|意見回饋|前往意見回饋|常見問題|歡迎捐款|清除篩選|首頁|登入|註冊|下一頁|上一頁|top|confirm|home|login|log in|sign in|sign up|register|privacy( policy)?|terms( of (use|service))?|contact( us)?|about( us)?|faq|donate|skip to content|search|menu|next|prev(ious)?|\d+|[«»‹›<>|\s]+)$/i;
 // 看起來是 CSS／程式碼的文字，不是課程說明
 const CODEISH = /[{}][^]*;|\b(font-size|margin|padding|display|color)\s*:/i;
 
@@ -136,10 +139,11 @@ export function buildContent(raw) {
   for (const l of raw.links ?? []) {
     const u = l.href.split('#')[0];
     const text = clean(l.text);
-    if (l.nav || hostOf(u) !== host || !text || text.length > 60) continue;
+    if (l.nav || hostOf(u) !== host || !text || text.length > 80 || JUNK_LINK.test(text)) continue;
     if (MATERIAL_EXT.test(u) || RESOURCE_PAGE.test(u) || videoFrom(u) || u.replace(/\/+$/, '') === here || relSeen.has(u)) continue;
     relSeen.add(u);
-    related.push({ id: u, title: VAGUE_LINK.test(text) && (clean(l.context) || clean(l.section)) ? `${clean(l.context) || clean(l.section)}・${text}` : text, url: u });
+    const label = VAGUE_LINK.test(text) && (clean(l.context) || clean(l.section)) ? `${clean(l.context) || clean(l.section)}・${text}` : text;
+    related.push({ id: u, title: tidyTitle(label), url: u });
     if (related.length >= 40) break;
   }
 
@@ -222,7 +226,7 @@ export function buildContent(raw) {
 export function tabsOf(content, { hideRelated = false } = {}) {
   const by = (cat) => content.materials.filter((m) => m.category === cat);
   const tabs = [];
-  if (content.overview.length || content.outline.length || by('overview').length) {
+  if (content.overview.length || by('overview').length) {
     tabs.push({ key: 'overview', label: CATEGORY_LABELS.overview, count: by('overview').length });
   }
   if (content.videos.length) tabs.push({ key: 'videos', label: CATEGORY_LABELS.videos, count: content.videos.length });
@@ -230,7 +234,7 @@ export function tabsOf(content, { hideRelated = false } = {}) {
     const n = by(key).length;
     if (n) tabs.push({ key, label: CATEGORY_LABELS[key], count: n });
   }
-  if (content.related.length && !hideRelated) tabs.push({ key: 'related', label: '相關頁面', count: content.related.length });
+  if (content.related.length && !hideRelated) tabs.push({ key: 'related', label: '其他頁面', count: content.related.length });
   return tabs;
 }
 

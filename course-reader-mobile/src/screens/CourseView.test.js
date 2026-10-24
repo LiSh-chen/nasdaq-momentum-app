@@ -27,20 +27,20 @@ beforeEach(() => jest.spyOn(Linking, 'openURL').mockResolvedValue());
 test('顯示課程標題、各分類分頁與數量、來源', () => {
   const { getByText } = setup();
   expect(getByText('微積分（一）')).toBeTruthy();
-  expect(getByText('大綱')).toBeTruthy();
+  expect(getByText('介紹')).toBeTruthy();
   expect(getByText('影片 2')).toBeTruthy();
   expect(getByText('講義 2')).toBeTruthy();
   expect(getByText('作業 1')).toBeTruthy();
-  expect(getByText('相關頁面 1')).toBeTruthy();
+  expect(getByText('其他頁面 1')).toBeTruthy();
   expect(getByText('內容來源：ocw.example.edu')).toBeTruthy();
 });
 
-test('有影片時預設先顯示影片，切到大綱可看課程說明', () => {
-  const { getByText, getAllByTestId } = setup();
+test('有影片時預設先顯示影片，切到介紹可看課程說明', () => {
+  const { getByText, getAllByTestId, queryByText } = setup();
   expect(getAllByTestId('webview')[0].props.source.html).toContain('embed/dQw4w9WgXcQ'); // 預設就是影片播放器
-  fireEvent.press(getByText('大綱'));
-  expect(getByText('課程說明')).toBeTruthy();
-  expect(getByText('課程大綱')).toBeTruthy();
+  fireEvent.press(getByText('介紹'));
+  expect(getByText('本課程介紹極限、導數與積分的基本概念與應用。')).toBeTruthy();
+  expect(queryByText('內容結構')).toBeNull(); // 只列出網頁標題的「內容結構」沒有用，不顯示
 });
 
 test('沒有影片時預設顯示第一個有內容的分頁', () => {
@@ -49,7 +49,7 @@ test('沒有影片時預設顯示第一個有內容的分頁', () => {
     links: [{ href: 'https://a.edu/f/ch1.pdf', text: '第一章講義', section: '講義' }],
   });
   const { getByText } = render(<CourseView content={noVideo} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
-  expect(getByText('課程說明')).toBeTruthy();
+  expect(getByText('本課程介紹基本概念與應用方式。')).toBeTruthy();
 });
 
 test('影片分頁：以來源網域嵌入播放，可切換影片', () => {
@@ -85,7 +85,7 @@ test('相關頁面可繼續整理，原頁面按鈕交給外層', () => {
   const onOpenPage = jest.fn();
   const onOpenSource = jest.fn();
   const { getByText } = setup({ onOpenPage, onOpenSource });
-  fireEvent.press(getByText('相關頁面 1'));
+  fireEvent.press(getByText('其他頁面 1'));
   fireEvent.press(getByText('第二週'));
   expect(onOpenPage).toHaveBeenCalledWith('https://ocw.example.edu/course/101/week-2/');
   fireEvent.press(getByText('原頁面'));
@@ -148,7 +148,7 @@ describe('多章節課程', () => {
   test('標題顯示該章標題；有章節時不顯示相關頁面分頁', () => {
     const { getByText, queryByText } = withChapters(1);
     expect(getByText('Lesson 1')).toBeTruthy();
-    expect(queryByText('相關頁面 1')).toBeNull();
+    expect(queryByText('其他頁面 1')).toBeNull();
   });
 
   test('這一章沒有內容時顯示章節，不會是空白畫面', () => {
@@ -221,5 +221,53 @@ describe('說明文字分區收納', () => {
     const { getByText, queryByText } = render(<CourseView content={one} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
     expect(getByText('本課程介紹基本概念與應用方式。')).toBeTruthy();
     expect(queryByText('展開')).toBeNull();
+  });
+});
+
+describe('版面依頁面類型呈現，只留有用的資訊', () => {
+  const listing = buildContent({
+    url: 'https://ocw.aca.ntu.edu.tw/', title: '臺大開放式課程', heading: '',
+    headings: [{ level: 2, text: '本期主打' }, { level: 2, text: 'HIGHLIGHT' }],
+    paras: ['臺大線上課程，探索無限可能。'],
+    links: [
+      { href: 'https://ocw.aca.ntu.edu.tw/about/terms', text: '隱私權政策', section: '', nav: false },
+      { href: 'https://ocw.aca.ntu.edu.tw/courses', text: '開始探索', section: '', nav: false },
+      { href: 'https://ocw.aca.ntu.edu.tw/courses/114S201', text: '2026/10/01 普通化學丙 彭旭明、鄭原忠 OCW', section: 'HIGHLIGHT', nav: false },
+      { href: 'https://ocw.aca.ntu.edu.tw/courses/100S111', text: '微積分 140,993', section: 'HIGHLIGHT', nav: false },
+      { href: 'https://ocw.aca.ntu.edu.tw/courses/101S120', text: '紅樓夢 136,890', section: 'HIGHLIGHT', nav: false },
+    ],
+  });
+  const renderListing = (props = {}) => render(<CourseView content={listing} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} {...props} />);
+
+  test('列表型頁面（只有一串可選的項目）：直接顯示清單與提示，沒有分頁列', () => {
+    const { getByText, queryByText } = renderListing();
+    expect(getByText('請選擇要查看的項目（共 3 項）')).toBeTruthy();
+    expect(getByText('普通化學丙 彭旭明、鄭原忠')).toBeTruthy();
+    expect(getByText('微積分')).toBeTruthy();
+    expect(getByText('紅樓夢')).toBeTruthy();
+    // 不需要的資訊
+    for (const noise of ['隱私權政策', '開始探索', 'HIGHLIGHT', '本期主打', '內容結構', '臺大線上課程，探索無限可能。', '其他頁面 3', '介紹']) {
+      expect(queryByText(noise)).toBeNull();
+    }
+  });
+
+  test('清單的每一列都有明確可點的樣子（›），點了就整理該頁', () => {
+    const onOpenPage = jest.fn();
+    const { getByText, getAllByText } = renderListing({ onOpenPage });
+    expect(getAllByText('›')).toHaveLength(3);
+    fireEvent.press(getByText('微積分'));
+    expect(onOpenPage).toHaveBeenCalledWith('https://ocw.aca.ntu.edu.tw/courses/100S111');
+  });
+
+  test('只有一個分頁時不顯示分頁列', () => {
+    const one = buildContent({ url: 'https://a.edu/c', title: 't', paras: ['本課程介紹基本概念與應用方式。'] });
+    const { queryByText, getByText } = render(<CourseView content={one} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
+    expect(getByText('本課程介紹基本概念與應用方式。')).toBeTruthy();
+    expect(queryByText('介紹')).toBeNull();
+  });
+
+  test('標題列顯示整理過的頁面標題', () => {
+    const { getAllByText } = renderListing();
+    expect(getAllByText('臺大開放式課程').length).toBeGreaterThan(0);
   });
 });

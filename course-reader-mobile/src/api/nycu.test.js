@@ -59,3 +59,17 @@ test('關鍵字為空時不發出請求', async () => {
   expect(await searchNycu('  ', 1, f)).toEqual({ items: [], count: 0, next: null, facets: {} });
   expect(f).not.toHaveBeenCalled();
 });
+
+test('頁碼 0 或未提供都視為第 1 頁；下一頁以正確的頁碼判斷', async () => {
+  const f = ok(PAGE);
+  const r = await searchNycu('微積分', 0, f);
+  expect(f.mock.calls[0][0]).toBe('https://ocw.nycu.edu.tw/?s=%E5%BE%AE%E7%A9%8D%E5%88%86');
+  expect(r.next).toBe(2);
+  expect((await searchNycu('微積分', undefined, ok(PAGE))).next).toBe(2);
+});
+
+test('結果帶有查詢資訊（供回報問題）', async () => {
+  const r = await searchNycu('微積分', 1, ok(PAGE));
+  expect(r.meta).toMatchObject({ url: 'https://ocw.nycu.edu.tw/?s=%E5%BE%AE%E7%A9%8D%E5%88%86', parsed: 2 });
+  expect(r.meta.bytes).toBeGreaterThan(100);
+});

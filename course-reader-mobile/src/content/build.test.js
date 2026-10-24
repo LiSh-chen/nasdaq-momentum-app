@@ -296,3 +296,37 @@ describe('臺大課程頁（取自真實診斷資料）', () => {
     expect(c.overviewSections).toEqual([{ title: '簡介', paragraphs: raw.paras }]);
   });
 });
+
+describe('相關頁面只留下有意義的項目', () => {
+  const base = 'https://ocw.aca.ntu.edu.tw';
+  const L = (path, text, extra = {}) => ({ href: `${base}${path}`, text, section: '', nav: false, ...extra });
+
+  test('去掉隱私權政策、開始探索等選單文字，以及純數字、符號', () => {
+    const c = buildContent({
+      url: `${base}/`, title: 't',
+      links: [
+        L('/about/terms', '隱私權政策'), L('/courses', '開始探索'), L('/courses?grid_type=grid', '清除篩選'),
+        L('/#top', 'TOP'), L('/p?page=2', '2'), L('/p?page=3', '»'), L('/x', 'Confirm'), L('/about/copyright', '版權聲明'),
+        L('/courses/100S111', '微積分'), L('/courses/101S120', '紅樓夢'),
+      ],
+    });
+    expect(c.related.map((r) => r.title)).toEqual(['微積分', '紅樓夢']);
+  });
+
+  test('標題去掉日期前綴、OCW 後綴與瀏覽次數，同一頁只列一次', () => {
+    const c = buildContent({
+      url: `${base}/`, title: 't',
+      links: [
+        L('/courses/114S201', '2026/10/01 普通化學丙 彭旭明、鄭原忠 OCW'),
+        L('/courses/100S111', '微積分 140,993'),
+        L('/courses/100S111', '微積分 2,034,407'),
+      ],
+    });
+    expect(c.related.map((r) => r.title)).toEqual(['普通化學丙 彭旭明、鄭原忠', '微積分']);
+  });
+});
+
+test('只有標題結構、沒有說明文字或大綱檔案時，不顯示「介紹」分頁', () => {
+  const c = buildContent({ url: 'https://a.edu/', title: 't', headings: [{ level: 2, text: '本期主打' }, { level: 2, text: 'HIGHLIGHT' }], paras: [] });
+  expect(tabsOf(c)).toEqual([]);
+});

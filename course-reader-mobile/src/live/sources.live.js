@@ -1,7 +1,8 @@
 /** @jest-environment node */
 // 對真實的耶魯／陽明交大網站驗證搜尋解析（需要網路）
 import { searchYale, resetYaleCache } from '../api/yale';
-import { searchNycu } from '../api/nycu';
+import { searchNycu, parseNycuResults } from '../api/nycu';
+import { getText } from '../api/http';
 import { searchCatalog } from '../api/search';
 
 jest.setTimeout(120000);
@@ -38,4 +39,27 @@ test('全部：同一個關鍵字混合 MIT、耶魯、陽明交大', async () =
   expect(r.items.length).toBeGreaterThan(5);
   expect(r.failed).toBe(0);
   expect(Object.keys(bySource).length).toBeGreaterThanOrEqual(2);
+});
+
+test('陽明交大：哪些頁面不用關鍵字也能列出課程（探測，僅輸出資訊）', async () => {
+  const urls = [
+    'https://ocw.nycu.edu.tw/',
+    'https://ocw.nycu.edu.tw/?s=',
+    'https://ocw.nycu.edu.tw/?post_type=course_page',
+    'https://ocw.nycu.edu.tw/?post_type=course_page&paged=2',
+    'https://ocw.nycu.edu.tw/?course_page=all-course',
+    'https://ocw.nycu.edu.tw/?course_page=all-course/college-of-science',
+  ];
+  for (const url of urls) {
+    try {
+      const html = await getText(url);
+      const items = parseNycuResults(html);
+      const articles = (html.match(/<article\b/g) || []).length;
+      const courseLinks = new Set((html.match(/course_page=all-course\/[^"'&<>\s]+/g) || [])).size;
+      const pages = [...new Set((html.match(/paged=\d+/g) || []))].slice(0, 6);
+      console.log(`[${url}] bytes=${html.length} articles=${articles} parsed=${items.length} courseLinks=${courseLinks} pager=${pages.join(',')} first=${items.slice(0, 3).map((c) => c.title).join(' ; ')}`);
+    } catch (e) {
+      console.log(`[${url}] ERROR ${e.message}`);
+    }
+  }
 });

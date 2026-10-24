@@ -74,3 +74,11 @@ test('「全部」不包含臺大（需要背景瀏覽器，較慢）', async ()
   await searchCatalog({ provider: 'all', q: 'calculus', browser: { run: jest.fn() } });
   expect(searchNtu).not.toHaveBeenCalled();
 });
+
+test('頁碼型來源（陽明交大、臺大）不接受 0：第一次搜尋視為第 1 頁', async () => {
+  const browser = { run: jest.fn() };
+  await searchCatalog({ provider: 'ntu', q: '微積分', cursor: 0, browser });
+  expect(searchNtu).toHaveBeenLastCalledWith('微積分', 1, browser);
+  await searchCatalog({ provider: 'nycu', q: '微積分', cursor: 0 });
+  expect(searchNycu).toHaveBeenLastCalledWith('微積分', 1);
+});

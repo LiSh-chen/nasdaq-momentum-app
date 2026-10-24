@@ -43,9 +43,26 @@ function FileViewer({ file, onClose }) {
   );
 }
 
+// 可點的一列：標題在左，右邊有「›」表示點了會進去
+function Row({ title, subtitle, onPress, active }) {
+  return (
+    <Pressable style={[styles.row, active && styles.rowActive]} onPress={onPress}>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.rowTitle} numberOfLines={2}>{active ? '▶ ' : ''}{title}</Text>
+        {subtitle ? <Text style={styles.rowMeta} numberOfLines={1}>{subtitle}</Text> : null}
+      </View>
+      <Text style={styles.chevron}>›</Text>
+    </Pressable>
+  );
+}
+
 // 統一的課程檢視：不論來源網站，都用相同的分類與版面呈現
+// - 課程頁／單元頁：依內容分成影片、講義、作業…等分頁（只有一個分頁時不顯示分頁列）
+// - 列表型頁面（只有一串可選的項目，如網站首頁、課程列表）：直接顯示清單，不放分頁
+
 export default function CourseView({ content, chapters, chapterIndex, onOpenPage, onOpenChapter, onOpenSource, onRefresh, onClose }) {
   const hasChapters = Boolean(chapters && chapters.length > 1);
+  const listMode = !hasChapters && content.videos.length === 0 && content.materials.length === 0 && content.related.length >= 3;
   const tabs = useMemo(() => {
     const t = tabsOf(content, { hideRelated: hasChapters });
     return hasChapters ? [{ key: 'chapters', label: '章節', count: chapters.length }, ...t] : t;
@@ -88,7 +105,15 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
   );
 
   let body = null;
-  if (tab === 'chapters') {
+  const sectionsDiffer = hasChapters && new Set(chapters.map((c) => c.section)).size > 1;
+  if (listMode) {
+    body = (
+      <ScrollView contentContainerStyle={styles.listPad}>
+        <Text style={styles.hint}>請選擇要查看的項目（共 {content.related.length} 項）</Text>
+        {content.related.map((r) => <Row key={r.id} title={r.title} onPress={() => onOpenPage(r.url)} />)}
+      </ScrollView>
+    );
+  } else if (tab === 'chapters') {
     body = (
       <FlatList
         data={chapters}
@@ -97,8 +122,11 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
         getItemLayout={(_, i) => ({ length: 56, offset: 56 * i, index: i })}
         renderItem={({ item, index }) => (
           <Pressable style={[styles.chapter, index === chapterIndex && styles.rowActive]} onPress={() => onOpenChapter(index, chapters)}>
-            <Text style={styles.rowMeta} numberOfLines={1}>{item.section}</Text>
-            <Text style={styles.rowTitle} numberOfLines={1}>{index === chapterIndex ? '▶ ' : ''}{item.title}</Text>
+            <View style={{ flex: 1 }}>
+              {sectionsDiffer ? <Text style={styles.rowMeta} numberOfLines={1}>{item.section}</Text> : null}
+              <Text style={styles.rowTitle} numberOfLines={1}>{index === chapterIndex ? '▶ ' : ''}{item.title}</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
           </Pressable>
         )}
       />
@@ -120,15 +148,10 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
           ))
         ) : (
           <>
-            {content.outline.length ? <Text style={styles.h2}>內容結構</Text> : null}
-            {content.outline.map((h, i) => (
-              <Text key={i} style={[styles.outline, { paddingLeft: Math.max(0, h.level - 1) * 12 }]}>{h.text}</Text>
-            ))}
-            {content.overview.length ? <Text style={[styles.h2, { marginTop: 16 }]}>課程說明</Text> : null}
             {content.overview.map((p, i) => <Text key={i} style={styles.para}>{p}</Text>)}
           </>
         )}
-        {materials('overview').length ? <Text style={[styles.h2, { marginTop: 16 }]}>大綱與課表檔案</Text> : null}
+        {materials('overview').length ? <Text style={[styles.h2, { marginTop: content.overview.length ? 16 : 0 }]}>大綱與課表檔案</Text> : null}
         {materials('overview').map(renderMaterial)}
       </ScrollView>
     );
@@ -158,14 +181,9 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
     );
   } else if (tab === 'related') {
     body = (
-      <ScrollView contentContainerStyle={styles.pad}>
-        <Text style={styles.note}>點選後會把該頁面也整理成統一格式。</Text>
-        {content.related.map((r) => (
-          <Pressable key={r.id} style={styles.row} onPress={() => onOpenPage(r.url)}>
-            <Text style={styles.icon}>🔗</Text>
-            <Text style={[styles.rowTitle, { flex: 1 }]} numberOfLines={2}>{r.title}</Text>
-          </Pressable>
-        ))}
+      <ScrollView contentContainerStyle={styles.listPad}>
+        <Text style={styles.hint}>點選項目查看內容</Text>
+        {content.related.map((r) => <Row key={r.id} title={r.title} onPress={() => onOpenPage(r.url)} />)}
       </ScrollView>
     );
   } else {
@@ -180,7 +198,7 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
         <Btn label="原頁面" onPress={() => onOpenSource(content.url)} />
       </View>
 
-      {tabs.length === 0 ? (
+      {tabs.length === 0 && !listMode ? (
         <View style={styles.empty}>
           <Text style={styles.emptyText}>這個頁面沒有找到影片、講義或大綱。</Text>
           <Text style={styles.note}>如果需要登入，請按「原頁面」登入後回來重新整理；也可以分享診斷資訊給開發者。</Text>
@@ -188,13 +206,15 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
         </View>
       ) : (
         <>
-          <View style={styles.tabs}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10 }}>
-              {tabs.map((t) => (
-                <Chip key={t.key} label={t.key === 'overview' ? t.label : `${t.label} ${t.count}`} active={tab === t.key} onPress={() => setTab(t.key)} />
-              ))}
-            </ScrollView>
-          </View>
+          {tabs.length >= 2 && !listMode ? (
+            <View style={styles.tabs}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 10 }}>
+                {tabs.map((t) => (
+                  <Chip key={t.key} label={t.key === 'overview' ? t.label : `${t.label} ${t.count}`} active={tab === t.key} onPress={() => setTab(t.key)} />
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
           <View style={{ flex: 1 }}>{body}</View>
         </>
       )}
@@ -228,6 +248,9 @@ const styles = StyleSheet.create({
   para: { fontSize: 14, lineHeight: 22, color: colors.text, marginBottom: 8 },
   note: { fontSize: 12, color: colors.muted, marginBottom: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.card, paddingHorizontal: 14, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
+  chevron: { fontSize: 22, color: colors.muted, paddingLeft: 8 },
+  hint: { fontSize: 13, color: colors.muted, paddingHorizontal: 14, paddingTop: 12, paddingBottom: 8 },
+  listPad: { paddingBottom: 40 },
   rowActive: { backgroundColor: colors.primarySoft },
   icon: { width: 24, textAlign: 'center', fontSize: 16, color: colors.primary },
   rowTitle: { fontSize: 14, color: colors.text },
@@ -240,7 +263,7 @@ const styles = StyleSheet.create({
   accHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
   accTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
   chev: { color: colors.muted, fontSize: 14 },
-  chapter: { height: 56, justifyContent: 'center', paddingHorizontal: 14, backgroundColor: colors.card, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
+  chapter: { height: 56, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, backgroundColor: colors.card, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
   chapterNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
   foot: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.card, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
   source: { flex: 1, fontSize: 11, color: colors.muted },

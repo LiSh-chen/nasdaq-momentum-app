@@ -31,8 +31,8 @@ export async function searchCatalog({ provider = 'all', q = '', cursor, browser,
     return { ...r, next: r.hasMore ? (cursor ?? 0) + r.items.length : null };
   }
   if (provider === 'yale') return searchYale(q);
-  if (provider === 'nycu') return searchNycu(q, cursor ?? 1);
-  if (provider === 'ntu') return searchNtu(q, cursor ?? 1, browser);
+  if (provider === 'nycu') return searchNycu(q, cursor || 1);
+  if (provider === 'ntu') return searchNtu(q, cursor || 1, browser);
 
   // 全部：只有第一頁會混入其他來源；之後的分頁（載入更多）只延續 MIT
   const mit = await searchCourses({ q, offset: cursor ?? 0 });

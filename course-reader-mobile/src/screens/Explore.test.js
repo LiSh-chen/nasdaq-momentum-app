@@ -1,5 +1,5 @@
 import React from 'react';
-import { FlatList } from 'react-native';
+import { FlatList, Share } from 'react-native';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import Explore from './Explore';
 import { searchCatalog } from '../api/search';
@@ -143,14 +143,13 @@ test('沒有結果時顯示提示', async () => {
   expect(getByText('找不到符合的課程')).toBeTruthy();
 });
 
-test('臺大：以背景瀏覽器搜尋（附說明），需要關鍵字', async () => {
+test('臺大：以背景瀏覽器搜尋（附說明）', async () => {
   const { getByText, getByPlaceholderText } = render(<Explore onOpenCourse={() => {}} />);
   await flush();
   fireEvent.press(getByText('臺大'));
   await flush();
   expect(last().provider).toBe('ntu');
   expect(last().browser).toBeDefined(); // 背景瀏覽器（BrowserRunner 的 ref）
-  expect(getByText('請輸入關鍵字搜尋臺大課程。')).toBeTruthy();
   expect(getByText(/臺大網站需要驗證/)).toBeTruthy();
   fireEvent.changeText(getByPlaceholderText('搜尋課程、主題、講師…'), '微積分');
   await flush();
@@ -169,4 +168,54 @@ test('臺大驗證未完成或逾時時，顯示專屬的錯誤訊息；被新�
   fireEvent.press(getByText('臺大'));
   await flush();
   expect(getByText(/臺大網站沒有回應或驗證未完成/)).toBeTruthy();
+});
+
+describe('臺大與陽明交大：沒有關鍵字也有內容可看', () => {
+  test('第一次搜尋不帶頁碼（避免臺大被查第 0 頁）', async () => {
+    render(<Explore onOpenCourse={() => {}} />);
+    await flush();
+    expect(last().cursor).toBeUndefined();
+  });
+
+  test('沒有關鍵字時提供建議關鍵字，點了就搜尋', async () => {
+    const { getByText, getByPlaceholderText } = render(<Explore onOpenCourse={() => {}} />);
+    await flush();
+    fireEvent.press(getByText('陽明交大'));
+    await flush();
+    expect(getByText('試試看：')).toBeTruthy();
+    fireEvent.press(getByText('微積分'));
+    await flush();
+    expect(last()).toMatchObject({ provider: 'nycu', q: '微積分' });
+    expect(getByPlaceholderText('搜尋課程、主題、講師…').props.value).toBe('微積分');
+  });
+
+  test('臺大沒有關鍵字時顯示最新與熱門課程，並說明可輸入關鍵字搜尋全部', async () => {
+    searchCatalog.mockResolvedValue(result([course('ntu:101S120', '紅樓夢', { sourceCode: 'ntu', sourceName: '臺大開放式課程' })], { browse: true }));
+    const { getByText, queryByText } = render(<Explore onOpenCourse={() => {}} />);
+    await flush();
+    fireEvent.press(getByText('臺大'));
+    await flush();
+    expect(getByText('紅樓夢')).toBeTruthy();
+    expect(getByText(/目前顯示的是最新與熱門課程/)).toBeTruthy();
+    expect(queryByText('請輸入關鍵字搜尋臺大課程。')).toBeNull();
+  });
+
+  test('有關鍵字但沒有結果時，可回報問題（附查詢網址與解析數量）', async () => {
+    const share = jest.spyOn(Share, 'share').mockResolvedValue({});
+    searchCatalog.mockResolvedValue(result([], { meta: { url: 'https://ocw.nycu.edu.tw/?s=x', bytes: 1234, parsed: 0 } }));
+    const { getByText, getByPlaceholderText } = render(<Explore onOpenCourse={() => {}} />);
+    await flush();
+    fireEvent.press(getByText('陽明交大'));
+    fireEvent.changeText(getByPlaceholderText('搜尋課程、主題、講師…'), 'x');
+    await flush();
+    fireEvent.press(getByText('回報這個問題'));
+    const msg = JSON.parse(share.mock.calls[0][0].message);
+    expect(msg).toMatchObject({ provider: 'nycu', query: 'x', meta: { url: 'https://ocw.nycu.edu.tw/?s=x', parsed: 0 } });
+  });
+
+  test('有結果時不顯示回報按鈕', async () => {
+    const { queryByText } = render(<Explore onOpenCourse={() => {}} />);
+    await flush();
+    expect(queryByText('回報這個問題')).toBeNull();
+  });
 });

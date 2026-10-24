@@ -1,4 +1,4 @@
-import { buildNtuSearchUrl, parseNtuResults, searchNtu } from './ntu';
+import { buildNtuSearchUrl, parseNtuHome, parseNtuResults, searchNtu } from './ntu';
 
 const B = 'https://ocw.aca.ntu.edu.tw';
 const link = (path, text, extra = {}) => ({ href: `${B}${path}`, text, section: '', nav: false, ...extra });
@@ -81,9 +81,62 @@ test('searchNtu：以瀏覽器載入搜尋頁，結果出現才算完成', async
   expect(r).toMatchObject({ count: 7, next: 2 });
 });
 
-test('關鍵字為空時不載入網頁；沒有瀏覽器時丟出錯誤', async () => {
+test('沒有瀏覽器時丟出錯誤', async () => {
   const run = jest.fn();
-  expect(await searchNtu('  ', 1, { run })).toEqual({ items: [], count: 0, next: null, facets: {} });
-  expect(run).not.toHaveBeenCalled();
   await expect(searchNtu('微積分', 1, null)).rejects.toThrow('browser');
+  expect(run).not.toHaveBeenCalled();
+});
+
+// 取自臺大 OCW 首頁的實際診斷資料（最新與熱門課程）
+const HOME = {
+  type: 'content', url: `${B}/`, paras: ['臺大線上課程，探索無限可能。'], headings: [], frames: [], videos: [],
+  links: [
+    link('/', '', { nav: true }),
+    link('/courses', '探索課程', { nav: true }),
+    link('/courses', '開始探索'),
+    link('/about/terms', '隱私權政策'),
+    link('/courses/101S123', '', { image: `${B}/img/101S123.jpg` }),   // 本期主打：只有圖片
+    link('/courses/114S201', '2026/10/01 普通化學丙 彭旭明、鄭原忠 OCW'),
+    link('/courses/114S103', '2026/09/01 化學工程概論 徐振哲 OCW'),
+    link('/courses/mooc0074', '2025/11/22 AI 時代人類的獨特性 葉素玲 MOOCOCW'),
+    link('/courses/100S111', '微積分 140,993', { image: `${B}/img/100S111.jpg` }),
+    link('/courses/101S120', '紅樓夢 136,890'),
+    link('/courses/100S111', '微積分 2,034,407'), // 同一門課出現在另一份排行
+    link('/courses/101S123', '', { image: `${B}/img/other.jpg` }),
+  ],
+};
+
+test('首頁的最新與熱門課程：整理標題、同一門課只列一次、附上縮圖', () => {
+  const { items, next } = parseNtuHome(HOME);
+  expect(items.map((c) => c.title)).toEqual(['普通化學丙 彭旭明、鄭原忠', '化學工程概論 徐振哲', 'AI 時代人類的獨特性 葉素玲', '微積分', '紅樓夢']);
+  expect(items.find((c) => c.id === 'ntu:100S111').image).toBe(`${B}/img/100S111.jpg`);
+  expect(next).toBeNull();
+});
+
+test('搜尋結果的標題也一併整理', () => {
+  const r = parseNtuResults({ links: [link('/courses/100S111', '微積分 朱樺 OCW'), link('/courses/101S120', '2025/10/01 紅樓夢 4,399,068')] }, 1);
+  expect(r.items.map((c) => c.title)).toEqual(['微積分 朱樺', '紅樓夢']);
+});
+
+test('沒有關鍵字時改載入首頁，顯示最新與熱門課程', async () => {
+  const run = jest.fn().mockResolvedValue(HOME);
+  const r = await searchNtu('', 1, { run });
+  expect(run.mock.calls[0][0]).toBe(`${B}/`);
+  expect(run.mock.calls[0][1].ready(HOME)).toBe(true);
+  expect(run.mock.calls[0][1].ready({ ...HOME, links: [] })).toBe(false);
+  expect(r.items).toHaveLength(5);
+  expect(r.browse).toBe(true);
+  expect(r.meta.url).toBe(`${B}/`);
+});
+
+test('頁碼 0 或未提供都視為第 1 頁', async () => {
+  const run = jest.fn().mockResolvedValue(RAW);
+  await searchNtu('微積分', 0, { run });
+  expect(run.mock.calls[0][0]).toBe(buildNtuSearchUrl('微積分', 1));
+  expect((await searchNtu('微積分', undefined, { run })).next).toBe(2);
+});
+
+test('結果帶有查詢資訊（供回報問題）', async () => {
+  const r = await searchNtu('微積分', 1, { run: jest.fn().mockResolvedValue(RAW) });
+  expect(r.meta).toMatchObject({ url: buildNtuSearchUrl('微積分', 1), parsed: 7 });
 });

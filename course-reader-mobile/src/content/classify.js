@@ -1,6 +1,6 @@
 // 依標題、檔名與所在區塊標題，把資料歸類到統一的分類
 export const CATEGORY_LABELS = {
-  overview: '大綱',
+  overview: '介紹',
   videos: '影片',
   lecture: '講義',
   assignment: '作業',
