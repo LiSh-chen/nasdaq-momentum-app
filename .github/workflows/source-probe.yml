@@ -7,43 +7,29 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: probe round 5 (CORS headers for a web version; NYCU course listing markup)
+      - name: probe round 6 (univ.deltamoocx.net)
         run: |
           set +e
-          UA="Mozilla/5.0 (compatible; course-reader-probe/1.0)"
-          g(){ curl -sL -m 30 -A "$UA" "$1"; }
+          UA="CourseReader/0.1 (personal study app)"
+          B=https://univ.deltamoocx.net
           sec(){ echo; echo "=================== $*"; }
-
-          sec "CORS / framing headers (request sent with a foreign Origin, like a web page would)"
-          for u in "https://api.learn.mit.edu/api/v1/learning_resources_search/?q=physics&limit=1" \
-                   "https://ocw.mit.edu/courses/8-01sc-classical-mechanics-fall-2016/" \
-                   "https://oyc.yale.edu/courses" \
-                   "https://ocw.nycu.edu.tw/?s=%E5%BE%AE%E7%A9%8D%E5%88%86" \
-                   "https://sharecourse.net/sharecourse"; do
-            echo "--- $u"
-            curl -s -D - -o /dev/null -m 25 -A "$UA" -H "Origin: https://someone.github.io" "$u" | grep -iE '^(HTTP/|access-control-allow-origin|x-frame-options|content-security-policy)' | cut -c1-200
-          done
-          echo "--- preflight for custom header (api.learn.mit.edu)"
-          curl -s -D - -o /dev/null -m 25 -X OPTIONS -H "Origin: https://someone.github.io" -H "Access-Control-Request-Method: GET" -H "Access-Control-Request-Headers: content-type" "https://api.learn.mit.edu/api/v1/learning_resources_search/?q=physics&limit=1" | grep -iE '^(HTTP/|access-control)' | cut -c1-200
-
-          sec "NYCU ?post_type=course_page : first two articles"
-          g "https://ocw.nycu.edu.tw/?post_type=course_page" > /tmp/a.html
-          grep -o '<article[^>]*>' /tmp/a.html | head -4 | cut -c1-260
+          sec robots.txt
+          curl -sL -m 30 -A "$UA" "$B/robots.txt" | head -40
+          sec "home headers"
+          curl -s -D - -o /tmp/home.html -m 30 -A "$UA" -H "Origin: https://someone.github.io" "$B/" | grep -iE '^(HTTP/|server|content-type|access-control|x-frame|content-security|cf-|set-cookie)' | cut -c1-200
+          echo "bytes=$(wc -c < /tmp/home.html)"
+          grep -oiE '<title>[^<]*' /tmp/home.html
+          sec "script/api hints"
+          grep -oE '(src|href)="[^"]+"' /tmp/home.html | head -40
+          grep -oiE '(api|graphql|json)[^"'"'"' ]{0,80}' /tmp/home.html | sort -u | head -20
+          sec "body text sample"
           python3 - <<'PY'
           import re
-          h=open('/tmp/a.html',encoding='utf-8',errors='replace').read()
-          for m in list(re.finditer(r'<article\b[^>]*>(.*?)</article>',h,re.S))[:2]:
-              b=re.sub(r'\s+',' ',m.group(1))
-              print('ARTICLE:', b[:900]); print()
+          h=open('/tmp/home.html',encoding='utf-8',errors='replace').read()
+          h=re.sub(r'<(script|style)[\s\S]*?</\1>','',h)
+          print(re.sub(r'\s+',' ',re.sub(r'<[^>]+>',' ',h))[:1500])
+          print()
+          print(re.sub(r'\s+',' ',h)[:2500])
           PY
-
-          sec "NYCU department listing (applied math): course cards?"
-          g "https://ocw.nycu.edu.tw/?course_page=all-course/college-of-science/am" > /tmp/d.html
-          echo "bytes=$(wc -c < /tmp/d.html) articles=$(grep -c '<article' /tmp/d.html)"
-          grep -oE 'href="https://ocw.nycu.edu.tw/\?course_page=all-course/college-of-science/am/[^"]+"' /tmp/d.html | sort -u | head -8 | cut -c1-200
-          python3 - <<'PY'
-          import re
-          h=open('/tmp/d.html',encoding='utf-8',errors='replace').read()
-          i=h.find('college-of-science/am/')
-          print(re.sub(r'\s+',' ',h[max(0,i-500):i+900]))
-          PY
+          sec "course-like links"
+          grep -oE 'href="[^"]*(course|class|lesson)[^"]*"' /tmp/home.html | sort -u | head -20
