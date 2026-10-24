@@ -18,7 +18,7 @@ export default function Explore({ onOpenCourse }) {
   const [query, setQuery] = useState('');
   const [provider, setProvider] = useState('all');
   const [filters, setFilters] = useState({ offeredBy: null, level: null, topic: null, hasVideos: false, sort: null });
-  const [state, setState] = useState({ items: [], count: 0, facets: {}, loading: true, error: null, next: null, failed: 0, browse: false, meta: null });
+  const [state, setState] = useState({ items: [], count: 0, facets: {}, loading: true, error: null, next: null, failed: 0, browse: false, defaultQuery: null, meta: null });
   const reqId = useRef(0);
   const browser = useRef(null);
 
@@ -37,6 +37,7 @@ export default function Explore({ onOpenCourse }) {
           next: r.next ?? null,
           failed: r.failed ?? 0,
           browse: Boolean(r.browse),
+          defaultQuery: r.defaultQuery ?? null,
           meta: r.meta ?? null,
           loading: false,
           error: null,
@@ -107,7 +108,7 @@ export default function Explore({ onOpenCourse }) {
       <Text style={styles.count}>{state.loading && !state.items.length ? '搜尋中…' : `共 ${state.count} 門課程`}</Text>
       {state.error ? <Text style={styles.error}>{state.error}</Text> : null}
       {state.failed ? <Text style={styles.note}>有 {state.failed} 個來源暫時無法連線，已先顯示其他來源的結果。</Text> : null}
-      {provider === 'nycu' && !query.trim() ? <Text style={styles.note}>請輸入關鍵字搜尋陽明交大課程。</Text> : null}
+      {provider === 'nycu' && !query.trim() && state.defaultQuery ? <Text style={styles.note}>目前顯示的是「{state.defaultQuery}」相關課程，輸入關鍵字可搜尋其他課程。</Text> : null}
       {provider === 'ntu' && !query.trim() && state.browse ? <Text style={styles.note}>目前顯示的是最新與熱門課程，輸入關鍵字可搜尋全部課程。</Text> : null}
       {provider === 'ntu' ? <Text style={styles.note}>臺大網站需要驗證，搜尋會在背景以內建瀏覽器進行，可能需要幾秒鐘。</Text> : null}
       {(provider === 'nycu' || provider === 'ntu') && !query.trim() ? (
@@ -135,7 +136,7 @@ export default function Explore({ onOpenCourse }) {
           <Pressable onPress={report} style={styles.reportBtn}><Text style={styles.reportText}>回報這個問題</Text></Pressable>
         ) : null
       }
-      ListEmptyComponent={!state.loading && !state.error ? <Text style={styles.empty}>找不到符合的課程</Text> : null}
+      ListEmptyComponent={!state.loading && !state.error ? <Text style={styles.empty}>{query.trim() ? '找不到符合的課程' : '目前沒有可顯示的課程'}</Text> : null}
       onEndReached={() => state.next !== null && !state.loading && run(state.next, true)}
       onEndReachedThreshold={0.6}
       keyboardShouldPersistTaps="handled"

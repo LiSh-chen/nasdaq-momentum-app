@@ -78,14 +78,15 @@ test('MIT 專屬的篩選只在選了 MIT 時出現，切換來源會清除篩�
 test('輸入關鍵字會（延遲後）搜尋；陽明交大沒有關鍵字時提示輸入', async () => {
   const { getByPlaceholderText, getByText, queryByText } = render(<Explore onOpenCourse={() => {}} />);
   await flush();
+  searchCatalog.mockResolvedValue(result([course(9, '微積分甲', { sourceCode: 'nycu', sourceName: '陽明交大 OCW' })], { browse: true, defaultQuery: '微積分' }));
   fireEvent.press(getByText('陽明交大'));
   await flush();
-  expect(getByText('請輸入關鍵字搜尋陽明交大課程。')).toBeTruthy();
+  expect(getByText(/目前顯示的是「微積分」相關課程/)).toBeTruthy();
   searchCatalog.mockClear();
   fireEvent.changeText(getByPlaceholderText('搜尋課程、主題、講師…'), '微積分');
   await flush();
   expect(last()).toMatchObject({ provider: 'nycu', q: '微積分' });
-  expect(queryByText('請輸入關鍵字搜尋陽明交大課程。')).toBeNull();
+  expect(queryByText(/目前顯示的是「微積分」相關課程/)).toBeNull();
 });
 
 test('捲到底時以來源給的位置載入下一頁並接在後面', async () => {
@@ -138,7 +139,9 @@ test('API 失敗時顯示錯誤訊息', async () => {
 
 test('沒有結果時顯示提示', async () => {
   searchCatalog.mockResolvedValue(result([]));
-  const { getByText } = render(<Explore onOpenCourse={() => {}} />);
+  const { getByText, getByPlaceholderText } = render(<Explore onOpenCourse={() => {}} />);
+  await flush();
+  fireEvent.changeText(getByPlaceholderText('搜尋課程、主題、講師…'), 'xyz');
   await flush();
   expect(getByText('找不到符合的課程')).toBeTruthy();
 });
@@ -217,5 +220,24 @@ describe('臺大與陽明交大：沒有關鍵字也有內容可看', () => {
     const { queryByText } = render(<Explore onOpenCourse={() => {}} />);
     await flush();
     expect(queryByText('回報這個問題')).toBeNull();
+  });
+});
+
+describe('沒有搜尋時不顯示「找不到」', () => {
+  test('還沒輸入關鍵字、也沒有可顯示的課程時，說明目前沒有內容，而不是「找不到符合的課程」', async () => {
+    searchCatalog.mockResolvedValue(result([]));
+    const { getByText, queryByText } = render(<Explore onOpenCourse={() => {}} />);
+    await flush();
+    expect(queryByText('找不到符合的課程')).toBeNull();
+    expect(getByText('目前沒有可顯示的課程')).toBeTruthy();
+  });
+
+  test('有關鍵字卻沒有結果時才說找不到', async () => {
+    searchCatalog.mockResolvedValue(result([]));
+    const { getByText, getByPlaceholderText } = render(<Explore onOpenCourse={() => {}} />);
+    await flush();
+    fireEvent.changeText(getByPlaceholderText('搜尋課程、主題、講師…'), '不存在的課');
+    await flush();
+    expect(getByText('找不到符合的課程')).toBeTruthy();
   });
 });

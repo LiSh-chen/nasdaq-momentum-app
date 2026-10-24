@@ -54,10 +54,19 @@ test('searchNycu：有下一頁連結時回傳 next，沒有就是 null', async 
   expect((await searchNycu('微積分', 2, ok(PAGE.replace('paged=2', 'paged=9')))).next).toBeNull();
 });
 
-test('關鍵字為空時不發出請求', async () => {
-  const f = jest.fn();
-  expect(await searchNycu('  ', 1, f)).toEqual({ items: [], count: 0, next: null, facets: {} });
-  expect(f).not.toHaveBeenCalled();
+test('關鍵字為空時改用預設關鍵字「微積分」搜尋，並標示為預設內容', async () => {
+  const f = ok(PAGE);
+  const r = await searchNycu('  ', 1, f);
+  expect(f.mock.calls[0][0]).toBe(buildNycuSearchUrl('微積分', 1));
+  expect(r).toMatchObject({ browse: true, defaultQuery: '微積分' });
+  expect(r.items).toHaveLength(2);
+  expect(r.next).toBe(2); // 預設內容也可以翻頁
+});
+
+test('有輸入關鍵字時不是預設內容', async () => {
+  const r = await searchNycu('物理', 1, ok(PAGE));
+  expect(r.browse).toBeUndefined();
+  expect(r.defaultQuery).toBeUndefined();
 });
 
 test('頁碼 0 或未提供都視為第 1 頁；下一頁以正確的頁碼判斷', async () => {

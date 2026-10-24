@@ -49,12 +49,21 @@ export function parseNycuResults(html) {
   return items;
 }
 
+// 網站沒有可靠的「全部課程」清單（首頁沒有課程、最新文章列的是各課程底下的單元），
+// 沒有關鍵字時改用常見的科目搜尋，並標示為預設內容
+export const DEFAULT_KEYWORD = '微積分';
+
 export async function searchNycu(query, page, fetchImpl = fetch) {
-  if (!String(query ?? '').trim()) return { items: [], count: 0, next: null, facets: {} };
+  const typed = String(query ?? '').trim();
+  const q = typed || DEFAULT_KEYWORD;
   const p = page || 1; // 0 或未提供都是第 1 頁
-  const url = buildNycuSearchUrl(query, p);
+  const url = buildNycuSearchUrl(q, p);
   const html = await getText(url, fetchImpl);
   const items = parseNycuResults(html);
   const hasMore = html.includes(`paged=${p + 1}`);
-  return { items, count: items.length, next: hasMore ? p + 1 : null, facets: {}, meta: { url, bytes: html.length, parsed: items.length } };
+  return {
+    items, count: items.length, next: hasMore ? p + 1 : null, facets: {},
+    ...(typed ? {} : { browse: true, defaultQuery: DEFAULT_KEYWORD }),
+    meta: { url, bytes: html.length, parsed: items.length },
+  };
 }
