@@ -65,6 +65,9 @@ export default function CourseDetail({ course, onRead, onOpenWeb }) {
             <Text style={styles.h2}>課程章節</Text>
             {outline === null ? <ActivityIndicator /> : null}
             {outlineError ? <Text style={styles.note}>章節載入失敗，仍可從課程首頁開始閱讀。</Text> : null}
+            {outline && outline.length === 0 && !outlineError ? (
+              <Text style={styles.note}>這門課沒有章節目錄，將直接開啟課程首頁。</Text>
+            ) : null}
             {outline?.map((s) => (
               <View key={s.key} style={{ marginBottom: 6 }}>
                 <Pressable onPress={() => onRead(course, readable, Math.max(0, readable.findIndex((p) => p.section === s.title)))}>

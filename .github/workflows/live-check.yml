@@ -1,7 +1,7 @@
 name: Live check course sources
 on:
   push:
-    paths: ['.github/workflows/probe.yml', 'course-reader-mobile/scripts/live-check.mjs', 'course-reader-mobile/src/api/**']
+    paths: ['.github/workflows/live-check.yml', 'course-reader-mobile/scripts/live-check.mjs', 'course-reader-mobile/src/api/**']
   workflow_dispatch:
 jobs:
   live:
