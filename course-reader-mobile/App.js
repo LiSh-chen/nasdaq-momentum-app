@@ -7,7 +7,6 @@ import CourseDetail from './src/screens/CourseDetail';
 import ExtractScreen from './src/screens/ExtractScreen';
 import Explore from './src/screens/Explore';
 import Library from './src/screens/Library';
-import Reader from './src/screens/Reader';
 import Sites from './src/screens/Sites';
 import WebPage from './src/screens/WebPage';
 import { colors } from './src/ui';
@@ -24,6 +23,7 @@ function Shell() {
   const [libraryKey, setLibraryKey] = useState(0);
 
   const push = (screen) => setStack((s) => [...s, screen]);
+  const replaceTop = (screen) => setStack((s) => [...s.slice(0, -1), screen]);
   const pop = () => {
     setStack((s) => s.slice(0, -1));
     setLibraryKey((k) => k + 1); // 回到分頁時重新載入閱讀進度與收藏
@@ -46,22 +46,23 @@ function Shell() {
     overlay = (
       <CourseDetail
         course={top.course}
-        onRead={(course, pages, startIndex) => push({ name: 'reader', course, pages, startIndex })}
-        onOpenWeb={(course) => push({ name: 'web', title: course.title, url: course.url })}
+        onRead={(course, pages, startIndex) =>
+          push({ name: 'extract', url: pages[startIndex].url, course, chapters: pages.length > 1 ? pages : null, chapterIndex: startIndex })
+        }
       />
     );
-  } else if (top?.name === 'reader') {
-    overlay = (
-      <Reader course={top.course} pages={top.pages} startIndex={top.startIndex} onClose={pop}
-        onOrganize={(url) => push({ name: 'extract', url })} />
-    );
   } else if (top?.name === 'extract') {
+    // 所有課程（任何來源、任何入口）都用同一個整理後的統一檢視
     overlay = (
       <ExtractScreen
         key={top.url}
         url={top.url}
+        course={top.course}
+        chapters={top.chapters}
+        chapterIndex={top.chapterIndex}
         onClose={pop}
-        onOpenPage={(url) => push({ name: 'extract', url })}
+        onOpenPage={(url) => push({ name: 'extract', url, course: top.course })}
+        onOpenChapter={(i) => replaceTop({ ...top, url: top.chapters[i].url, chapterIndex: i })}
         onOpenSource={(url) => push({ name: 'web', title: '原頁面', url })}
       />
     );

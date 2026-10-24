@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, act } from '@testing-library/react-native';
+import { render, act, fireEvent } from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import ExtractScreen from './ExtractScreen';
 
 const send = (getByTestId, msg) => act(() => { getByTestId('webview').props.onMessage({ nativeEvent: { data: JSON.stringify(msg) } }); });
@@ -46,4 +47,44 @@ test('忽略格式不正確的訊息', async () => {
   const { getByTestId, getByText } = render(<ExtractScreen url={raw.url} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
   await act(async () => { getByTestId('webview').props.onMessage({ nativeEvent: { data: 'not json' } }); });
   expect(getByText('整理頁面中…')).toBeTruthy();
+});
+
+describe('課程流程', () => {
+  const course = { id: 9, title: 'Calculus', url: raw.url, sourceCode: 'ocw', sourceName: 'MIT OCW', topics: [], levels: [], instructors: [], features: [], free: true, unified: true };
+  const chapters = [{ title: '第一章', url: raw.url, section: 'A' }, { title: '第二章', url: raw.url + 'b/', section: 'A' }];
+
+  test('整理完成後記錄閱讀進度（章節索引與總章節數）', async () => {
+    await AsyncStorage.clear();
+    const { getByTestId, getByText } = render(
+      <ExtractScreen url={raw.url} course={course} chapters={chapters} chapterIndex={1} onClose={() => {}} onOpenChapter={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />
+    );
+    await send(getByTestId, raw);
+    expect(getByText('章節 2')).toBeTruthy();
+    const saved = JSON.parse(await AsyncStorage.getItem('progress'));
+    expect(saved[9]).toMatchObject({ index: 1, title: '第二章', total: 2 });
+  });
+
+  test('單頁應用程式一開始沒內容時多等幾次，內容出現就顯示', async () => {
+    const empty = { ...raw, frames: [], links: [] };
+    const { getByTestId, getByText, queryByText } = render(<ExtractScreen url={raw.url} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
+    await send(getByTestId, empty);
+    await act(async () => { jest.advanceTimersByTime(2100); });
+    expect(queryByText('這個頁面沒有找到影片、講義或大綱。')).toBeNull(); // 還在等
+    await send(getByTestId, raw);
+    expect(getByText('影片 1')).toBeTruthy();
+  });
+
+  test('始終沒有內容時顯示空狀態，按重新整理會重新載入頁面', async () => {
+    const empty = { ...raw, frames: [], links: [] };
+    const { getByTestId, getByText } = render(<ExtractScreen url={raw.url} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
+    for (let i = 0; i < 3; i++) {
+      await send(getByTestId, empty);
+      await act(async () => { jest.advanceTimersByTime(2100); });
+    }
+    await send(getByTestId, empty);
+    expect(getByText('這個頁面沒有找到影片、講義或大綱。')).toBeTruthy();
+    fireEvent.press(getByText('重新整理'));
+    expect(getByText('整理頁面中…')).toBeTruthy();
+    expect(getByTestId('webview').props.source.uri).toBe(raw.url);
+  });
 });

@@ -4,7 +4,7 @@ import { fetchOutline, flattenOutline } from '../api/ocw';
 import { getFavorites, getProgress, toggleFavorite } from '../store';
 import { colors } from '../ui';
 
-export default function CourseDetail({ course, onRead, onOpenWeb }) {
+export default function CourseDetail({ course, onRead }) {
   const [outline, setOutline] = useState(null); // null=載入中
   const [outlineError, setOutlineError] = useState(false);
   const [fav, setFav] = useState(false);
@@ -19,6 +19,8 @@ export default function CourseDetail({ course, onRead, onOpenWeb }) {
       .catch(() => { setOutline([]); setOutlineError(true); });
   }, [course]);
 
+  // 有章節目錄的來源（OCW）要等目錄載入；其他來源直接以課程首頁開始
+  const ready = !course.unified || outline !== null;
   const pages = outline ? flattenOutline(outline) : [];
   // 沒抓到章節時退回課程首頁，仍能在統一介面內閱讀
   const readable = pages.length ? pages : [{ title: course.title, url: course.url, section: course.title }];
@@ -38,24 +40,18 @@ export default function CourseDetail({ course, onRead, onOpenWeb }) {
         {course.features.length ? <Text style={styles.meta}>內容：{course.features.join('、')}</Text> : null}
 
         <View style={styles.actions}>
-          {course.unified ? (
-            <Pressable style={styles.primary} disabled={outline === null} onPress={() => onRead(course, readable, resumeAt)}>
-              <Text style={styles.primaryText}>
-                {outline === null ? '載入章節中…' : progress ? `繼續閱讀（第 ${resumeAt + 1} 頁）` : '開始閱讀'}
-              </Text>
-            </Pressable>
-          ) : (
-            <Pressable style={styles.primary} onPress={() => onOpenWeb(course)}>
-              <Text style={styles.primaryText}>在 App 內開啟（需登入）</Text>
-            </Pressable>
-          )}
+          <Pressable style={styles.primary} disabled={!ready} onPress={() => onRead(course, readable, resumeAt)}>
+            <Text style={styles.primaryText}>
+              {!ready ? '載入章節中…' : progress ? (readable.length > 1 ? `繼續學習（第 ${resumeAt + 1} 章）` : '繼續學習') : '開始學習'}
+            </Text>
+          </Pressable>
           <Pressable style={styles.secondary} onPress={async () => setFav(await toggleFavorite(course))}>
             <Text style={styles.secondaryText}>{fav ? '★ 已收藏' : '☆ 收藏'}</Text>
           </Pressable>
         </View>
 
         {!course.unified ? (
-          <Text style={styles.note}>此來源的課程內容需登入且受平台條款保護，因此以 App 內網頁開啟，登入狀態會被記住。</Text>
+          <Text style={styles.note}>此來源需要登入。若進去後沒有內容，請在檢視上方按「原頁面」登入，再回來按「重新整理」，登入狀態會被記住。</Text>
         ) : null}
 
         {course.description ? <Text style={styles.desc}>{course.description}</Text> : null}

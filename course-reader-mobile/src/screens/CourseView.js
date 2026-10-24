@@ -43,9 +43,14 @@ function FileViewer({ file, onClose }) {
 }
 
 // 統一的課程檢視：不論來源網站，都用相同的分類與版面呈現
-export default function CourseView({ content, onOpenPage, onOpenSource, onClose }) {
-  const tabs = useMemo(() => tabsOf(content), [content]);
-  const [tab, setTab] = useState(tabs[0]?.key ?? 'overview');
+export default function CourseView({ content, chapters, chapterIndex, onOpenPage, onOpenChapter, onOpenSource, onRefresh, onClose }) {
+  const hasChapters = Boolean(chapters && chapters.length > 1);
+  const tabs = useMemo(() => {
+    const t = tabsOf(content);
+    return hasChapters ? [{ key: 'chapters', label: '章節', count: chapters.length }, ...t] : t;
+  }, [content, hasChapters, chapters]);
+  // 有影片就先看影片；否則第一個有內容的分頁；這頁沒內容但有章節時顯示章節
+  const [tab, setTab] = useState(() => (tabs.find((t) => t.key === 'videos') ?? tabs.find((t) => t.key !== 'chapters') ?? tabs[0])?.key ?? 'overview');
   const [videoId, setVideoId] = useState(content.videos[0]?.id ?? null);
   const [file, setFile] = useState(null);
   const origin = useMemo(() => { try { return new URL(content.url).origin; } catch { return 'https://localhost'; } }, [content.url]);
@@ -65,7 +70,22 @@ export default function CourseView({ content, onOpenPage, onOpenSource, onClose 
   );
 
   let body = null;
-  if (tab === 'overview') {
+  if (tab === 'chapters') {
+    body = (
+      <FlatList
+        data={chapters}
+        keyExtractor={(c) => c.url}
+        initialScrollIndex={Math.max(0, Math.min(chapterIndex ?? 0, chapters.length - 1))}
+        getItemLayout={(_, i) => ({ length: 56, offset: 56 * i, index: i })}
+        renderItem={({ item, index }) => (
+          <Pressable style={[styles.chapter, index === chapterIndex && styles.rowActive]} onPress={() => onOpenChapter(index)}>
+            <Text style={styles.rowMeta} numberOfLines={1}>{item.section}</Text>
+            <Text style={styles.rowTitle} numberOfLines={1}>{index === chapterIndex ? '▶ ' : ''}{item.title}</Text>
+          </Pressable>
+        )}
+      />
+    );
+  } else if (tab === 'overview') {
     body = (
       <ScrollView contentContainerStyle={styles.pad}>
         {content.outline.length ? <Text style={styles.h2}>內容結構</Text> : null}
@@ -129,7 +149,8 @@ export default function CourseView({ content, onOpenPage, onOpenSource, onClose 
       {tabs.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyText}>這個頁面沒有找到影片、講義或大綱。</Text>
-          <Text style={styles.note}>可能需要先在原頁面進入具體的課程；也可以分享診斷資訊給開發者。</Text>
+          <Text style={styles.note}>如果需要登入，請按「原頁面」登入後回來重新整理；也可以分享診斷資訊給開發者。</Text>
+          {onRefresh ? <Btn label="重新整理" dark onPress={onRefresh} /> : null}
         </View>
       ) : (
         <>
@@ -144,6 +165,13 @@ export default function CourseView({ content, onOpenPage, onOpenSource, onClose 
         </>
       )}
 
+      {hasChapters && typeof chapterIndex === 'number' ? (
+        <View style={styles.chapterNav}>
+          <Btn label="← 上一章" dark disabled={chapterIndex === 0} onPress={() => onOpenChapter(chapterIndex - 1)} />
+          <Text style={styles.source}>{chapterIndex + 1} / {chapters.length}</Text>
+          <Btn label="下一章 →" dark disabled={chapterIndex === chapters.length - 1} onPress={() => onOpenChapter(chapterIndex + 1)} />
+        </View>
+      ) : null}
       <View style={styles.foot}>
         <Text style={styles.source} numberOfLines={1}>內容來源：{content.source}</Text>
         <Pressable onPress={() => Share.share({ message: JSON.stringify(content.diagnostic ?? { url: content.url, counts: { videos: content.videos.length, materials: content.materials.length, related: content.related.length } }, null, 1) })}>
@@ -174,6 +202,8 @@ const styles = StyleSheet.create({
   fallback: { color: colors.primary, fontSize: 12, textAlign: 'center', padding: 8 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   emptyText: { fontSize: 15, color: colors.text, marginBottom: 8, textAlign: 'center' },
+  chapter: { height: 56, justifyContent: 'center', paddingHorizontal: 14, backgroundColor: colors.card, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
+  chapterNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
   foot: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.card, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
   source: { flex: 1, fontSize: 11, color: colors.muted },
   share: { fontSize: 11, color: colors.primary },

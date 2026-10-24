@@ -33,6 +33,22 @@ test('顯示課程標題、各分類分頁與數量、來源', () => {
   expect(getByText('作業 1')).toBeTruthy();
   expect(getByText('相關頁面 1')).toBeTruthy();
   expect(getByText('內容來源：ocw.example.edu')).toBeTruthy();
+});
+
+test('有影片時預設先顯示影片，切到大綱可看課程說明', () => {
+  const { getByText, getAllByTestId } = setup();
+  expect(getAllByTestId('webview')[0].props.source.html).toContain('embed/dQw4w9WgXcQ'); // 預設就是影片播放器
+  fireEvent.press(getByText('大綱'));
+  expect(getByText('課程說明')).toBeTruthy();
+  expect(getByText('課程大綱')).toBeTruthy();
+});
+
+test('沒有影片時預設顯示第一個有內容的分頁', () => {
+  const noVideo = buildContent({
+    url: 'https://a.edu/c/', title: 't', heading: '課', headings: [], paras: ['本課程介紹基本概念與應用方式。'],
+    links: [{ href: 'https://a.edu/f/ch1.pdf', text: '第一章講義', section: '講義' }],
+  });
+  const { getByText } = render(<CourseView content={noVideo} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
   expect(getByText('課程說明')).toBeTruthy();
 });
 
@@ -80,4 +96,66 @@ test('頁面沒有可整理的內容時顯示說明', () => {
   const empty = buildContent({ url: 'https://a.b/', title: '空白頁' });
   const { getByText } = render(<CourseView content={empty} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
   expect(getByText('這個頁面沒有找到影片、講義或大綱。')).toBeTruthy();
+});
+
+describe('多章節課程', () => {
+  const chapters = [
+    { title: 'Syllabus', url: 'https://ocw.example.edu/c/1/', section: 'Syllabus' },
+    { title: 'Lesson 1', url: 'https://ocw.example.edu/c/2/', section: 'Week 1' },
+    { title: 'Lesson 2', url: 'https://ocw.example.edu/c/3/', section: 'Week 1' },
+  ];
+  const withChapters = (index, onOpenChapter = () => {}) =>
+    render(<CourseView content={content} chapters={chapters} chapterIndex={index} onOpenChapter={onOpenChapter} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
+
+  test('章節分頁排第一，列出所有章節並標示目前這章', () => {
+    const { getByText } = withChapters(1);
+    expect(getByText('章節 3')).toBeTruthy();
+    fireEvent.press(getByText('章節 3'));
+    expect(getByText('▶ Lesson 1')).toBeTruthy();
+    expect(getByText('Lesson 2')).toBeTruthy();
+  });
+
+  test('點章節會開啟該章，且每章都用同一套分類呈現', () => {
+    const onOpenChapter = jest.fn();
+    const { getByText } = withChapters(0, onOpenChapter);
+    fireEvent.press(getByText('章節 3'));
+    fireEvent.press(getByText('Lesson 2'));
+    expect(onOpenChapter).toHaveBeenCalledWith(2);
+    expect(getByText('影片 2')).toBeTruthy(); // 同一頁的影片、講義分頁仍在
+    expect(getByText('講義 2')).toBeTruthy();
+  });
+
+  test('上一章／下一章，頭尾章節會停用', () => {
+    const onOpenChapter = jest.fn();
+    const mid = withChapters(1, onOpenChapter);
+    expect(mid.getByText('2 / 3')).toBeTruthy();
+    fireEvent.press(mid.getByText('下一章 →'));
+    fireEvent.press(mid.getByText('← 上一章'));
+    expect(onOpenChapter.mock.calls).toEqual([[2], [0]]);
+    mid.unmount();
+
+    const first = withChapters(0, onOpenChapter);
+    onOpenChapter.mockClear();
+    fireEvent.press(first.getByText('← 上一章'));
+    expect(onOpenChapter).not.toHaveBeenCalled();
+    first.unmount();
+
+    const last = withChapters(2, onOpenChapter);
+    fireEvent.press(last.getByText('下一章 →'));
+    expect(onOpenChapter).not.toHaveBeenCalled();
+  });
+
+  test('這一章沒有內容時顯示章節，不會是空白畫面', () => {
+    const empty = buildContent({ url: 'https://ocw.example.edu/c/1/', title: 'Syllabus' });
+    const { getByText } = render(<CourseView content={empty} chapters={chapters} chapterIndex={0} onOpenChapter={() => {}} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
+    expect(getByText('▶ Syllabus')).toBeTruthy();
+  });
+});
+
+test('沒有內容時提供重新整理（例如登入後回來重試）', () => {
+  const empty = buildContent({ url: 'https://a.b/', title: '空白頁' });
+  const onRefresh = jest.fn();
+  const { getByText } = render(<CourseView content={empty} onRefresh={onRefresh} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
+  fireEvent.press(getByText('重新整理'));
+  expect(onRefresh).toHaveBeenCalled();
 });

@@ -1,7 +1,7 @@
 name: Live check course sources
 on:
   push:
-    paths: ['.github/workflows/live-check.yml', 'course-reader-mobile/scripts/live-check.mjs', 'course-reader-mobile/src/api/**']
+    paths: ['.github/workflows/live-check.yml', 'course-reader-mobile/scripts/live-check.mjs', 'course-reader-mobile/src/api/**', 'course-reader-mobile/src/content/**', 'course-reader-mobile/src/live/**']
   workflow_dispatch:
 jobs:
   live:
@@ -14,3 +14,9 @@ jobs:
       - name: live check against real MIT Learn API / OCW
         working-directory: course-reader-mobile
         run: node --experimental-default-type=module scripts/live-check.mjs
+      - name: install dependencies
+        working-directory: course-reader-mobile
+        run: npm ci --no-audit --no-fund
+      - name: organizer against real OCW pages
+        working-directory: course-reader-mobile
+        run: npx jest --testMatch '**/*.live.js' --verbose=false
