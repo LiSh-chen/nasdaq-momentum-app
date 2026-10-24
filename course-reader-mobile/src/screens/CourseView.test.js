@@ -188,3 +188,38 @@ test('課程首頁（尚未進入任何章節）有章節時預設顯示章節�
   expect(getByText('單元一')).toBeTruthy();
   expect(getByText('單元二')).toBeTruthy();
 });
+
+describe('說明文字分區收納', () => {
+  const sectioned = buildContent({
+    url: 'https://ocw.aca.ntu.edu.tw/courses/111S205', title: 'Calculus (4) - 臺大開放式課程',
+    paras: ['This course covers line and surface integrals.', '需修過微積分（一）至（三）。', '指定閱讀：Stewart, Calculus.'],
+    paraSections: ['課程概述', '課程要求', '指定閱讀'],
+    links: [{ href: 'https://ocw.aca.ntu.edu.tw/files/syllabus.pdf', text: '課程大綱', section: '' }],
+  });
+  const setupSec = () => render(<CourseView content={sectioned} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
+
+  test('每個標題一個區塊，只有第一個預設展開', () => {
+    const { getByText, queryByText } = setupSec();
+    expect(getByText('課程概述')).toBeTruthy();
+    expect(getByText('This course covers line and surface integrals.')).toBeTruthy();
+    expect(queryByText('需修過微積分（一）至（三）。')).toBeNull();
+    expect(queryByText('指定閱讀：Stewart, Calculus.')).toBeNull();
+  });
+
+  test('點區塊標題可展開與收合', () => {
+    const { getByText, queryByText } = setupSec();
+    fireEvent.press(getByText('課程要求'));
+    expect(getByText('需修過微積分（一）至（三）。')).toBeTruthy();
+    fireEvent.press(getByText('課程概述'));
+    expect(queryByText('This course covers line and surface integrals.')).toBeNull();
+    fireEvent.press(getByText('課程要求'));
+    expect(queryByText('需修過微積分（一）至（三）。')).toBeNull();
+  });
+
+  test('只有一個區塊時不需要收合，直接顯示', () => {
+    const one = buildContent({ url: 'https://a.edu/c', title: 't', paras: ['本課程介紹基本概念與應用方式。'], paraSections: [''] });
+    const { getByText, queryByText } = render(<CourseView content={one} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
+    expect(getByText('本課程介紹基本概念與應用方式。')).toBeTruthy();
+    expect(queryByText('展開')).toBeNull();
+  });
+});

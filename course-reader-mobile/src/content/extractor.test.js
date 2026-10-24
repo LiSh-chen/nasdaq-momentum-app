@@ -155,3 +155,13 @@ test('連結內的圖片網址一併回傳（用於課程卡片縮圖），佔�
   const img = Object.fromEntries(raw.links.map((l) => [l.href.split('/').pop(), l.image]));
   expect(img).toEqual({ A: 'https://ocw.example.edu/img/a.jpg', B: 'https://cdn.example.edu/b.jpg', C: '', D: '' });
 });
+
+test('說明文字附上所屬的標題（paraSections），與 paras 一一對應', () => {
+  const raw = extract(`<html><head><title>t</title></head><body><main>
+    <h2>Calculus (4)</h2>
+    <h3>課程概述</h3><div><p>This course covers line and surface integrals.</p><p>Students evaluate integrals over curves.</p></div>
+    <h3>課程要求</h3><div><div><p>需修過微積分（一）至（三）。</p></div></div>
+    <p>短</p></main></body></html>`);
+  expect(raw.paras).toHaveLength(3);
+  expect(raw.paraSections).toEqual(['課程概述', '課程概述', '課程要求']);
+});

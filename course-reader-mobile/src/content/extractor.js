@@ -60,10 +60,14 @@ export const EXTRACT_JS = `
       return { level: Number(e.tagName.charAt(1)), text: text(e) };
     }).filter(function (h) { return h.text; }).slice(0, 80);
 
-    // 說明文字只取段落與資訊表格；清單項目多半是選單
-    var paras = [].slice.call(root.querySelectorAll('p,dd,td,blockquote')).filter(function (e) { return !inChrome(e); }).map(text).filter(function (s) {
-      return s.length >= 8 && s.length < 600;
-    }).slice(0, 60);
+    // 說明文字只取段落與資訊表格（清單項目多半是選單），並記下每段所屬的標題
+    var paras = [];
+    var paraSections = [];
+    [].slice.call(root.querySelectorAll('p,dd,td,blockquote')).forEach(function (e) {
+      if (paras.length >= 60 || inChrome(e)) return;
+      var t = text(e);
+      if (t.length >= 8 && t.length < 600) { paras.push(t); paraSections.push(sectionOf(e)); }
+    });
 
     // 延遲載入的 iframe：src 只是佔位（data:／about:blank），真正的網址在 data-src 等屬性
     var frameSrc = function (e) {
@@ -117,7 +121,7 @@ export const EXTRACT_JS = `
     var h1 = document.querySelector('h1');
     post({
       type: 'content', url: location.href, title: t, heading: h1 ? text(h1) : '',
-      lang: document.documentElement.lang || '', headings: headings, paras: paras,
+      lang: document.documentElement.lang || '', headings: headings, paras: paras, paraSections: paraSections,
       frames: frames, videos: videos, links: links, forms: forms
     });
   } catch (e) {

@@ -170,10 +170,38 @@ export function buildContent(raw) {
       if (children.length >= 200) break;
     }
   } catch {}
+  // 單元標題重複（如分成上下兩段）時加上（第幾個／共幾個），否則清單裡分不出來
+  const titleCount = new Map();
+  children.forEach((c) => titleCount.set(c.title, (titleCount.get(c.title) ?? 0) + 1));
+  const titleSeen = new Map();
+  for (const c of children) {
+    const n = titleCount.get(c.title);
+    if (n > 1) {
+      const k = (titleSeen.get(c.title) ?? 0) + 1;
+      titleSeen.set(c.title, k);
+      c.title = `${c.title}（${k}/${n}）`;
+    }
+  }
 
   const outline = (raw.headings ?? []).map((h) => ({ level: h.level, text: clean(h.text) })).filter((h) => h.text);
-  // 太短的多半是按鈕或選單文字；中文資訊密度高，門檻訂為 8 個字以保留「授課教師：王大明」這類短資訊
-const overview = [...new Set((raw.paras ?? []).map(clean).filter((s) => s.length >= 8 && !/[«»]/.test(s) && !/^(previous|next)\b/i.test(s) && !CODEISH.test(s)))].slice(0, 12);
+  // 說明文字：太短的多半是按鈕或選單，中文資訊密度高所以門檻訂為 8 個字（保留「授課教師：王大明」這類短資訊）
+  const accepted = [];
+  const paraSeen = new Set();
+  (raw.paras ?? []).forEach((p, i) => {
+    const t = clean(p);
+    if (t.length < 8 || /[«»]/.test(t) || /^(previous|next)\b/i.test(t) || CODEISH.test(t) || paraSeen.has(t)) return;
+    paraSeen.add(t);
+    accepted.push({ text: t, section: clean(raw.paraSections?.[i] ?? '') });
+  });
+  const overview = accepted.map((a) => a.text).slice(0, 12);
+  // 依所屬標題分區（沒有標題的歸在「簡介」），保留首次出現的順序
+  const overviewSections = [];
+  for (const a of accepted.slice(0, 40)) {
+    const title = a.section || '簡介';
+    let sec = overviewSections.find((x) => x.title === title);
+    if (!sec) overviewSections.push((sec = { title, paragraphs: [] }));
+    sec.paragraphs.push(a.text);
+  }
 
   return {
     url: raw.url,
@@ -181,6 +209,7 @@ const overview = [...new Set((raw.paras ?? []).map(clean).filter((s) => s.length
     source: host,
     outline,
     overview,
+    overviewSections,
     videos,
     materials,
     related,

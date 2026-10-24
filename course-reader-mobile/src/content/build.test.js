@@ -245,3 +245,54 @@ describe('頁面底下的子頁面自動成為章節', () => {
     expect(buildContent(page([L('/courses/100S111/1', long)])).children[0].title).toBe(long);
   });
 });
+
+describe('臺大課程頁（取自真實診斷資料）', () => {
+  const B = 'https://ocw.aca.ntu.edu.tw';
+  const unit = (n, t) => ({ href: `${B}/courses/111S205/${n}`, text: t, section: 'Calculus (4)', nav: false });
+  const UNITS = ['Line Integrals I', 'Line Integrals I', 'Line Integrals II', 'Line Integrals II', 'Surface Integrals I', 'Taylor\'s Theorem', 'Taylor\'s Theorem'];
+  const raw = {
+    url: `${B}/courses/111S205`, title: 'Calculus (4) - 臺大開放式課程', heading: '', lang: 'zh-Hant',
+    headings: [{ level: 2, text: 'Calculus (4)' }, { level: 3, text: '課程概述' }, { level: 3, text: '課程目標' }],
+    paras: ['This course covers line and surface integrals and series.', 'Students learn to evaluate integrals over curves.', '需修過微積分（一）至（三）。'],
+    paraSections: ['課程概述', '課程概述', '課程要求'],
+    frames: [
+      { src: 'https://www.recaptcha.net/recaptcha/api2/anchor?ar=1', title: 'reCAPTCHA', section: '課程回饋' },
+      { src: `${B}/courses/111S205`, title: '', section: '課程回饋' },
+    ],
+    links: [
+      { href: `${B}/courses`, text: '全部課程', section: '', nav: true },
+      ...UNITS.map((t, i) => unit(i + 1, t)),
+      { href: `${B}/courses/111S102`, text: 'Calculus (1) Kwok-Wing Tsoi (蔡國榮) OCW', section: '課程推薦', nav: false },
+    ],
+  };
+
+  test('標題去掉站名後綴；reCAPTCHA 與自身頁面的 iframe 不是影片', () => {
+    const c = buildContent(raw);
+    expect(c.title).toBe('Calculus (4)');
+    expect(c.videos).toEqual([]);
+  });
+
+  test('各單元成為章節；標題重複的加上（第幾個／共幾個）', () => {
+    const c = buildContent(raw);
+    expect(c.children.map((x) => x.title)).toEqual([
+      'Line Integrals I（1/2）', 'Line Integrals I（2/2）', 'Line Integrals II（1/2）', 'Line Integrals II（2/2）',
+      'Surface Integrals I', "Taylor's Theorem（1/2）", "Taylor's Theorem（2/2）",
+    ]);
+    expect(c.children[0].url).toBe(`${B}/courses/111S205/1`);
+  });
+
+  test('說明文字依標題分區；沒有標題的文字歸在「簡介」', () => {
+    const c = buildContent({ ...raw, paras: [...raw.paras, '一段沒有標題的說明文字內容。'], paraSections: [...raw.paraSections, ''] });
+    expect(c.overviewSections).toEqual([
+      { title: '課程概述', paragraphs: ['This course covers line and surface integrals and series.', 'Students learn to evaluate integrals over curves.'] },
+      { title: '課程要求', paragraphs: ['需修過微積分（一）至（三）。'] },
+      { title: '簡介', paragraphs: ['一段沒有標題的說明文字內容。'] },
+    ]);
+    expect(c.overview).toHaveLength(4); // 平面的清單仍然保留
+  });
+
+  test('沒有 paraSections（舊資料）時整段歸在「簡介」', () => {
+    const c = buildContent({ ...raw, paraSections: undefined });
+    expect(c.overviewSections).toEqual([{ title: '簡介', paragraphs: raw.paras }]);
+  });
+});

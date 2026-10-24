@@ -61,6 +61,8 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
   });
   const [videoId, setVideoId] = useState(content.videos[0]?.id ?? null);
   const [file, setFile] = useState(null);
+  const [openSecs, setOpenSecs] = useState(() => new Set([0])); // 說明文字的區塊，預設只展開第一個
+  const toggleSec = (i) => setOpenSecs((o) => { const n = new Set(o); if (n.has(i)) n.delete(i); else n.add(i); return n; });
   const origin = useMemo(() => { try { return new URL(content.url).origin; } catch { return 'https://localhost'; } }, [content.url]);
   const video = content.videos.find((v) => v.id === videoId) ?? content.videos[0];
 
@@ -102,14 +104,30 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
       />
     );
   } else if (tab === 'overview') {
+    const secs = content.overviewSections ?? [];
+    const grouped = secs.length >= 2;
     body = (
       <ScrollView contentContainerStyle={styles.pad}>
-        {content.outline.length ? <Text style={styles.h2}>內容結構</Text> : null}
-        {content.outline.map((h, i) => (
-          <Text key={i} style={[styles.outline, { paddingLeft: Math.max(0, h.level - 1) * 12 }]}>{h.text}</Text>
-        ))}
-        {content.overview.length ? <Text style={[styles.h2, { marginTop: 16 }]}>課程說明</Text> : null}
-        {content.overview.map((p, i) => <Text key={i} style={styles.para}>{p}</Text>)}
+        {grouped ? (
+          secs.map((sec, i) => (
+            <View key={sec.title} style={styles.acc}>
+              <Pressable style={styles.accHead} onPress={() => toggleSec(i)}>
+                <Text style={styles.accTitle}>{sec.title}</Text>
+                <Text style={styles.chev}>{openSecs.has(i) ? '▴' : '▾'}</Text>
+              </Pressable>
+              {openSecs.has(i) ? sec.paragraphs.map((p, j) => <Text key={j} style={styles.para}>{p}</Text>) : null}
+            </View>
+          ))
+        ) : (
+          <>
+            {content.outline.length ? <Text style={styles.h2}>內容結構</Text> : null}
+            {content.outline.map((h, i) => (
+              <Text key={i} style={[styles.outline, { paddingLeft: Math.max(0, h.level - 1) * 12 }]}>{h.text}</Text>
+            ))}
+            {content.overview.length ? <Text style={[styles.h2, { marginTop: 16 }]}>課程說明</Text> : null}
+            {content.overview.map((p, i) => <Text key={i} style={styles.para}>{p}</Text>)}
+          </>
+        )}
         {materials('overview').length ? <Text style={[styles.h2, { marginTop: 16 }]}>大綱與課表檔案</Text> : null}
         {materials('overview').map(renderMaterial)}
       </ScrollView>
@@ -218,6 +236,10 @@ const styles = StyleSheet.create({
   fallback: { color: colors.primary, fontSize: 12, textAlign: 'center', padding: 8 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   emptyText: { fontSize: 15, color: colors.text, marginBottom: 8, textAlign: 'center' },
+  acc: { backgroundColor: colors.card, borderRadius: 8, marginBottom: 8, paddingHorizontal: 12 },
+  accHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12 },
+  accTitle: { fontSize: 15, fontWeight: '700', color: colors.text },
+  chev: { color: colors.muted, fontSize: 14 },
   chapter: { height: 56, justifyContent: 'center', paddingHorizontal: 14, backgroundColor: colors.card, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
   chapterNav: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.card, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
   foot: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 8, backgroundColor: colors.card, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
