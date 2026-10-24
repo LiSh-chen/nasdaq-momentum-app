@@ -125,3 +125,23 @@ test('連結同一列的文字（如週次）會一併回傳，供籠統的連�
   const ctx = Object.fromEntries(raw.links.map((l) => [l.href.split('/').pop(), l.context]));
   expect(ctx).toEqual({ '1': '第一週 極限', '2': '第二週 導數', 'n3.pdf': '講義三' });
 });
+
+test('只有圖片的連結（課程卡片）用圖片的 alt／aria-label／title 當文字', () => {
+  const raw = extract(`<html><head><title>t</title></head><body><main><h2>本期主打</h2>
+    <a href="/courses/101S123"><img src="/a.jpg" alt="紅樓夢"></a>
+    <a href="/courses/099S133" aria-label="線性代數"><svg></svg></a>
+    <a href="/courses/110S102" title="微積分"></a>
+    <a href="/courses/110S108">  有文字  <img alt="不該使用"></a></main></body></html>`);
+  const t = Object.fromEntries(raw.links.map((l) => [l.href.split('/').pop(), l.text]));
+  expect(t).toEqual({ '101S123': '紅樓夢', '099S133': '線性代數', '110S102': '微積分', '110S108': '有文字' });
+});
+
+test('回傳頁面上的表單與輸入欄位，供判斷網站的搜尋方式', () => {
+  const raw = extract(`<html><head><title>t</title></head><body><main>
+    <form action="/courses" method="get"><input name="keyword" type="search" placeholder="搜尋課程"><select name="dept"></select><button>送出</button></form>
+    <form action="https://x.edu/login" method="POST"><input name="u" type="text"><input name="p" type="password"></form></main></body></html>`);
+  expect(raw.forms).toEqual([
+    { action: 'https://ocw.example.edu/courses', method: 'get', inputs: [{ name: 'keyword', type: 'search', placeholder: '搜尋課程' }, { name: 'dept', type: 'select-one', placeholder: '' }] },
+    { action: 'https://x.edu/login', method: 'post', inputs: [{ name: 'u', type: 'text', placeholder: '' }, { name: 'p', type: 'password', placeholder: '' }] },
+  ]);
+});

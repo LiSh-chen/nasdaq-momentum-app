@@ -52,7 +52,7 @@ export default function ExtractScreen({ url, course, chapters, chapterIndex, onC
         url: msg.url, title: msg.title, heading: msg.heading, lang: msg.lang,
         counts: { headings: msg.headings.length, paras: msg.paras.length, frames: msg.frames.length, videos: msg.videos.length, links: msg.links.length },
         headings: msg.headings.slice(0, 40), frames: msg.frames.slice(0, 20), videos: msg.videos.slice(0, 10),
-        links: msg.links.slice(0, 120), built: { videos: content.videos.length, materials: content.materials.length, related: content.related.length },
+        forms: msg.forms ?? [], links: msg.links.slice(0, 120), built: { videos: content.videos.length, materials: content.materials.length, related: content.related.length },
       };
       if (tabsOf(content).length) setCached(url, content); // 空結果不快取，登入後重試才會重新抓
       setState({ status: 'done', content, message: '' });

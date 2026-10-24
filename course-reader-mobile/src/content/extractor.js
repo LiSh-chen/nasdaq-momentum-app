@@ -82,15 +82,34 @@ export const EXTRACT_JS = `
       return { src: abs(s), title: v.title || '', section: sectionOf(v) };
     }).filter(function (v) { return v.src; });
 
+    // 只有圖片的連結（課程卡片）沒有文字，改用 aria-label、title 或圖片的 alt
+    var linkText = function (a) {
+      var t = text(a);
+      if (t) return t;
+      var img = a.querySelector && a.querySelector('img[alt]');
+      return (a.getAttribute('aria-label') || a.getAttribute('title') || (img && img.getAttribute('alt')) || '').replace(/\\s+/g, ' ').trim();
+    };
+
     var links = [].slice.call(document.querySelectorAll('a[href]')).map(function (a) {
-      return { href: abs(a.getAttribute('href')), text: text(a), section: sectionOf(a), context: rowText(a), nav: inChrome(a) };
+      return { href: abs(a.getAttribute('href')), text: linkText(a), section: sectionOf(a), context: rowText(a), nav: inChrome(a) };
     }).filter(function (l) { return /^https?:/.test(l.href); }).slice(0, 800);
+
+    // 表單與輸入欄位：用來判斷網站的搜尋方式（網址參數或頁面內搜尋）
+    var forms = [].slice.call(document.querySelectorAll('form')).slice(0, 6).map(function (f) {
+      return {
+        action: abs(f.getAttribute('action') || ''),
+        method: (f.getAttribute('method') || 'get').toLowerCase(),
+        inputs: [].slice.call(f.querySelectorAll('input,select,textarea')).filter(function (i) { return i.type !== 'hidden' && i.type !== 'submit'; }).slice(0, 8).map(function (i) {
+          return { name: i.name || '', type: i.type || '', placeholder: i.getAttribute('placeholder') || '' };
+        })
+      };
+    });
 
     var h1 = document.querySelector('h1');
     post({
       type: 'content', url: location.href, title: t, heading: h1 ? text(h1) : '',
       lang: document.documentElement.lang || '', headings: headings, paras: paras,
-      frames: frames, videos: videos, links: links
+      frames: frames, videos: videos, links: links, forms: forms
     });
   } catch (e) {
     post({ type: 'error', message: String(e && e.message || e) });
