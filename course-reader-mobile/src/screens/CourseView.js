@@ -33,7 +33,7 @@ function FileViewer({ file, onClose }) {
     <Modal visible animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={styles.viewer}>
         <View style={styles.viewerBar}>
-          <Btn label="✕" onPress={onClose} />
+          <Btn label="← 返回" onPress={onClose} />
           <Text style={styles.viewerTitle} numberOfLines={1}>{file.title}</Text>
           <Btn label="下載" onPress={() => Linking.openURL(file.url).catch(() => {})} />
         </View>
@@ -60,7 +60,7 @@ function Row({ title, subtitle, onPress, active }) {
 // - 課程頁／單元頁：依內容分成影片、講義、作業…等分頁（只有一個分頁時不顯示分頁列）
 // - 列表型頁面（只有一串可選的項目，如網站首頁、課程列表）：直接顯示清單，不放分頁
 
-export default function CourseView({ content, chapters, chapterIndex, onOpenPage, onOpenChapter, onOpenSource, onRefresh, onClose }) {
+export default function CourseView({ content, chapters, chapterIndex, onOpenPage, onOpenChapter, onOpenSource, onRefresh, onClose, onHome }) {
   const hasChapters = Boolean(chapters && chapters.length > 1);
   const listMode = !hasChapters && content.videos.length === 0 && content.materials.length === 0 && content.related.length >= 3;
   const tabs = useMemo(() => {
@@ -193,7 +193,8 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
   return (
     <SafeAreaView style={styles.root} edges={[]}>
       <View style={styles.head}>
-        <Btn label="✕" onPress={onClose} />
+        <Btn label="← 返回" onPress={onClose} />
+        {onHome ? <Btn label="首頁" onPress={onHome} /> : null}
         <Text style={styles.title} numberOfLines={1}>{(hasChapters && chapters[chapterIndex]?.title) || content.title}</Text>
         <Btn label="原頁面" onPress={() => onOpenSource(content.url)} />
       </View>

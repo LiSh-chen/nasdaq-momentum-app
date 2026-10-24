@@ -92,8 +92,8 @@ export default function Sites({ onOrganize }) {
     <SafeAreaView style={styles.root} edges={[]}>
       <View style={styles.toolbar}>
         <Btn label="☰" onPress={() => setMenuOpen(true)} />
-        <Btn label="←" disabled={!nav.canGoBack} onPress={() => web.current?.goBack()} />
-        <Btn label="→" disabled={!nav.canGoForward} onPress={() => web.current?.goForward()} />
+        <Btn label="上一頁" disabled={!nav.canGoBack} onPress={() => web.current?.goBack()} />
+        <Btn label="下一頁" disabled={!nav.canGoForward} onPress={() => web.current?.goForward()} />
         <Btn label="⟳" disabled={!active} onPress={() => web.current?.reload()} />
         <Text style={styles.title} numberOfLines={1}>{active?.name ?? '課程閱讀器'}</Text>
         <Btn label="整理" disabled={!active || !onOrganize} onPress={() => onOrganize(nav.url || active.url)} />

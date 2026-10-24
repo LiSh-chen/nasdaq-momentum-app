@@ -44,7 +44,7 @@ export default function Explore({ onOpenCourse }) {
         }));
       } catch (e) {
         if (id !== reqId.current || /superseded/.test(e?.message)) return;
-        setState((s) => ({ ...s, loading: false, meta: null, error: provider === 'ntu' ? '臺大網站沒有回應或驗證未完成，請稍後再試' : '載入失敗，請檢查網路後再試一次' }));
+        setState((s) => ({ ...s, loading: false, meta: null, error: provider === 'ntu' ? '臺大網站沒有回應或驗證未完成，請稍後再試' : provider === 'deltamoocx' ? '台達磨課師網站沒有回應，請稍後再試' : '載入失敗，請檢查網路後再試一次' }));
       }
     },
     [provider, query, filters]
@@ -62,7 +62,7 @@ export default function Explore({ onOpenCourse }) {
   const set = (key, value) => setFilters((f) => ({ ...f, [key]: f[key] === value ? null : value }));
   const { facets } = state;
   // 臺大、陽明交大是解析網頁取得的結果：有關鍵字卻沒有結果、或出錯時，提供回報（附查詢資訊，方便找出原因）
-  const showReport = !state.loading && (provider === 'nycu' || provider === 'ntu') && (Boolean(state.error) || (state.items.length === 0 && query.trim().length > 0));
+  const showReport = !state.loading && (provider === 'nycu' || provider === 'ntu' || provider === 'deltamoocx') && (Boolean(state.error) || (state.items.length === 0 && query.trim().length > 0));
   const report = () => Share.share({ message: JSON.stringify({ provider, query, error: state.error, meta: state.meta }, null, 1) });
 
   const header = (
@@ -110,6 +110,7 @@ export default function Explore({ onOpenCourse }) {
       {state.failed ? <Text style={styles.note}>有 {state.failed} 個來源暫時無法連線，已先顯示其他來源的結果。</Text> : null}
       {provider === 'nycu' && !query.trim() && state.defaultQuery ? <Text style={styles.note}>目前顯示的是「{state.defaultQuery}」相關課程，輸入關鍵字可搜尋其他課程。</Text> : null}
       {provider === 'ntu' && !query.trim() && state.browse ? <Text style={styles.note}>目前顯示的是最新與熱門課程，輸入關鍵字可搜尋全部課程。</Text> : null}
+      {provider === 'deltamoocx' ? <Text style={styles.note}>台達磨課師的課程會在背景載入首頁後顯示，關鍵字搜尋的範圍是首頁列出的課程。</Text> : null}
       {provider === 'ntu' ? <Text style={styles.note}>臺大網站需要驗證，搜尋會在背景以內建瀏覽器進行，可能需要幾秒鐘。</Text> : null}
       {(provider === 'nycu' || provider === 'ntu') && !query.trim() ? (
         <View style={styles.suggest}>

@@ -6,14 +6,15 @@ import { persistSessionCookies } from '../cookies';
 import { Btn, colors } from '../ui';
 
 // 需登入的來源（如 MITx）：在 App 內開啟網頁，並記住登入狀態
-export default function WebPage({ title, url, onClose }) {
+export default function WebPage({ title, url, onClose, onHome }) {
   const web = useRef(null);
   const [nav, setNav] = useState({ canGoBack: false });
   return (
     <SafeAreaView style={styles.root}>
       <View style={styles.bar}>
-        <Btn label="✕" onPress={onClose} />
-        <Btn label="←" disabled={!nav.canGoBack} onPress={() => web.current?.goBack()} />
+        <Btn label="← 返回" onPress={onClose} />
+        {onHome ? <Btn label="首頁" onPress={onHome} /> : null}
+        <Btn label="上一頁" disabled={!nav.canGoBack} onPress={() => web.current?.goBack()} />
         <Text style={styles.title} numberOfLines={1}>{title}</Text>
         <Btn label="⟳" onPress={() => web.current?.reload()} />
       </View>

@@ -33,3 +33,15 @@ export async function saveProgress(course, { index, title, url, total }) {
   all[course.id] = { course: slim(course), index, title, url, total, updatedAt: Date.now() };
   await write('progress', all);
 }
+
+export async function removeFavorite(id) {
+  const favs = await read('favorites');
+  delete favs[id];
+  await write('favorites', favs);
+}
+
+export async function removeProgress(id) {
+  const all = await read('progress');
+  delete all[id];
+  await write('progress', all);
+}

@@ -14,7 +14,7 @@ const MAX_TRIES = 8;
 
 // 在 App 內以一般瀏覽器載入頁面（通過網站的人機驗證與登入），再擷取內容並整理成統一格式。
 // 載入期間原網頁是隱藏的，只顯示載入畫面；只有需要使用者操作（驗證）或失敗時才顯示網頁。
-export default function ExtractScreen({ url, course, chapters, chapterIndex, onClose, onOpenPage, onOpenChapter, onOpenSource }) {
+export default function ExtractScreen({ url, course, chapters, chapterIndex, onClose, onOpenPage, onOpenChapter, onOpenSource, onHome }) {
   const web = useRef(null);
   const tries = useRef(0);
   const emptyTries = useRef(0);
@@ -79,6 +79,7 @@ export default function ExtractScreen({ url, course, chapters, chapterIndex, onC
         chapters={effective}
         chapterIndex={chapterIndex}
         onClose={onClose}
+        onHome={onHome}
         onOpenPage={onOpenPage}
         onOpenChapter={onOpenChapter}
         onOpenSource={onOpenSource}
@@ -94,7 +95,8 @@ export default function ExtractScreen({ url, course, chapters, chapterIndex, onC
   return (
     <SafeAreaView style={styles.root} edges={[]}>
       <View style={styles.bar}>
-        <Btn label="✕" onPress={onClose} />
+        <Btn label="← 返回" onPress={onClose} />
+        {onHome ? <Btn label="首頁" onPress={onHome} /> : null}
         <Text style={styles.title} numberOfLines={1}>{showWeb ? '請完成網站驗證' : '整理中…'}</Text>
         {state.status === 'error' ? <Btn label="重試" onPress={reset} /> : <View style={{ width: 52 }} />}
       </View>

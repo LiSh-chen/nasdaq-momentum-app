@@ -1,4 +1,5 @@
 import { searchCourses } from './mitLearn.js';
+import { searchDeltamoocx } from './deltamoocx.js';
 import { searchNtu } from './ntu.js';
 import { searchNycu } from './nycu.js';
 import { searchYale } from './yale.js';
@@ -9,6 +10,7 @@ export const PROVIDERS = [
   { id: 'yale', label: '耶魯' },
   { id: 'nycu', label: '陽明交大' },
   { id: 'ntu', label: '臺大' },
+  { id: 'deltamoocx', label: '台達' },
 ];
 
 // 各來源的結果輪流排列，讓每個來源的課程都看得到
@@ -32,6 +34,7 @@ export async function searchCatalog({ provider = 'all', q = '', cursor, browser,
   }
   if (provider === 'yale') return searchYale(q);
   if (provider === 'nycu') return searchNycu(q, cursor || 1);
+  if (provider === 'deltamoocx') return searchDeltamoocx(q, browser);
   if (provider === 'ntu') return searchNtu(q, cursor || 1, browser);
 
   // 全部：只有第一頁會混入其他來源；之後的分頁（載入更多）只延續 MIT

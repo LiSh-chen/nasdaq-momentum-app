@@ -28,6 +28,7 @@ function Shell() {
     setStack((s) => s.slice(0, -1));
     setLibraryKey((k) => k + 1); // 回到分頁時重新載入閱讀進度與收藏
   };
+  const home = () => { setStack([]); setTab('explore'); setLibraryKey((k) => k + 1); };
   const openCourse = (course) => push({ name: 'detail', course });
 
   // Android 返回鍵：先關閉最上層畫面，再回到「探索」
@@ -61,6 +62,7 @@ function Shell() {
         chapters={top.chapters}
         chapterIndex={top.chapterIndex}
         onClose={pop}
+        onHome={home}
         onOpenPage={(url) => push({ name: 'extract', url, course: top.course })}
         onOpenChapter={(i, list) => {
           const l = list ?? top.chapters;
@@ -70,7 +72,7 @@ function Shell() {
       />
     );
   } else if (top?.name === 'web') {
-    overlay = <WebPage title={top.title} url={top.url} onClose={pop} />;
+    overlay = <WebPage title={top.title} url={top.url} onClose={pop} onHome={home} />;
   }
 
   // 閱讀器與網頁自帶工具列；課程詳情則在上方補一條返回列
@@ -84,6 +86,7 @@ function Shell() {
           {!fullScreen && (
             <View style={styles.header}>
               <Pressable onPress={pop}><Text style={styles.back}>← 返回</Text></Pressable>
+              {stack.length > 1 && <Pressable onPress={home}><Text style={styles.back}>首頁</Text></Pressable>}
             </View>
           )}
           {overlay}
@@ -116,7 +119,7 @@ export default function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.dark },
-  header: { height: 48, justifyContent: 'center', paddingHorizontal: 14 },
+  header: { height: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14 },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
   back: { color: '#fff', fontSize: 16 },
   fill: { flex: 1 },
