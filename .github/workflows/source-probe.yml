@@ -7,56 +7,34 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: probe round 2 (plain requests, honest user agent; challenge pages are reported, not bypassed)
+      - name: probe round 3 (plain requests, honest user agent; challenge pages are reported, not bypassed)
         run: |
           set +e
           UA="Mozilla/5.0 (compatible; course-reader-probe/1.0)"
-          g(){ curl -sL -m 25 -A "$UA" "$1"; }
+          g(){ curl -sL -m 30 -A "$UA" "$1"; }
           sec(){ echo; echo "=================== $*"; }
 
-          sec "MIT Learn: which platforms/offerers exist for courses (search endpoint)"
-          g "https://api.learn.mit.edu/api/v1/learning_resources_search/?resource_type=course&aggregations=platform&aggregations=offered_by&limit=1" | jq -c '.metadata.aggregations | {platform, offered_by}'
-
-          sec "Yale OYC: listing item markup + a course page's metadata"
-          g "https://oyc.yale.edu/courses" > /tmp/y.html
-          echo "listing links: $(grep -oE 'href="/[a-z-]+/[a-z]+-[0-9a-z]+"' /tmp/y.html | sort -u | wc -l)"
-          grep -n -m1 -B6 -A10 'astr-160' /tmp/y.html | tr -s ' \n' | head -c 1500
-          g "https://oyc.yale.edu/astronomy/astr-160" > /tmp/y2.html
-          grep -oE '<meta (property|name)="(og:title|og:description|og:image|description)"[^>]*>' /tmp/y2.html | head -5
-          grep -oE '<(iframe|video)[^>]*>' /tmp/y2.html | head -3
-          grep -oE 'href="[^"]*(youtube|\.pdf|\.mp3|\.mp4|archive)[^"]*"' /tmp/y2.html | head -5
-
-          sec "NYCU OCW: structure + search"
-          g "https://ocw.nycu.edu.tw/" > /tmp/n.html
-          echo "title: $(grep -oE '<title>[^<]*' /tmp/n.html | head -1)  len=$(wc -c < /tmp/n.html)"
-          grep -oE '<form[^>]*>' /tmp/n.html | head -3
-          grep -oE 'href="https://ocw.nycu.edu.tw/[^"]*"' /tmp/n.html | sort -u | head -25
+          sec "NYCU: search results markup"
           g "https://ocw.nycu.edu.tw/?s=%E5%BE%AE%E7%A9%8D%E5%88%86" > /tmp/n2.html
-          echo "search len=$(wc -c < /tmp/n2.html) title: $(grep -oE '<title>[^<]*' /tmp/n2.html | head -1)"
-          grep -oE '<h[1-4][^>]*>\s*<a[^>]*>[^<]*' /tmp/n2.html | head -8
+          grep -oE 'href="https://ocw.nycu.edu.tw/\?[a-z_]+=[^"]*"' /tmp/n2.html | grep -vE 'openedu|donate|faq|feed|lang=|page_id|feedback|story_page|speech' | sort -u | head -12
+          I=$(grep -n -m1 -E 'course=|\?post_type=course|entry-title|course-title' /tmp/n2.html | head -1 | cut -d: -f1); echo "first marker line: $I"
+          [ -n "$I" ] && sed -n "$((I-3)),$((I+14))p" /tmp/n2.html | tr -s ' \t' | cut -c1-260
+          sec "NYCU: all-course listing markup"
+          g "https://ocw.nycu.edu.tw/?course_page=all-course" > /tmp/n3.html
+          echo "len=$(wc -c < /tmp/n3.html) title: $(grep -oE '<title>[^<]*' /tmp/n3.html | head -1)"
+          grep -oE 'href="https://ocw.nycu.edu.tw/\?course=[^"]*"' /tmp/n3.html | sort -u | wc -l
+          grep -oE 'href="https://ocw.nycu.edu.tw/\?course=[^"]*"' /tmp/n3.html | sort -u | head -3
+          J=$(grep -n -m1 -E '\?course=' /tmp/n3.html | cut -d: -f1); [ -n "$J" ] && sed -n "$((J-4)),$((J+10))p" /tmp/n3.html | tr -s ' \t' | cut -c1-260
 
-          sec "ShareCourse"
-          g "https://sharecourse.net/sharecourse" > /tmp/s.html
-          echo "title: $(grep -oE '<title>[^<]*' /tmp/s.html | head -1) len=$(wc -c < /tmp/s.html)"
-          grep -oE '<form[^>]*>' /tmp/s.html | head -3
-          grep -oE 'href="[^"]*(course|search)[^"]*"' /tmp/s.html | sort -u | head -20
+          sec "ShareCourse: search form inputs + results"
+          g "https://www.sharecourse.net/sharecourse" | grep -A12 'id="myform"' | grep -oE '<(input|select|button)[^>]*>' | head -8
+          g "https://www.sharecourse.net/sharecourse/course/view/searchCourse?keyword=%E5%BE%AE%E7%A9%8D%E5%88%86" > /tmp/s2.html
+          echo "len=$(wc -c < /tmp/s2.html) title: $(grep -oE '<title>[^<]*' /tmp/s2.html | head -1)"
+          grep -oE 'href="[^"]*(courseInfo|course/view/[a-zA-Z]+/[0-9]+)[^"]*"' /tmp/s2.html | sort -u | head -6
+          K=$(grep -n -m1 -E 'courseInfo|course/view/[a-zA-Z]+/[0-9]+' /tmp/s2.html | cut -d: -f1); [ -n "$K" ] && sed -n "$((K-4)),$((K+14))p" /tmp/s2.html | tr -s ' \t' | cut -c1-240
 
-          sec "edX search page: embedded data?"
-          g "https://www.edx.org/search?q=python" > /tmp/e.html
-          echo "len=$(wc -c < /tmp/e.html) next_data=$(grep -c '__NEXT_DATA__' /tmp/e.html) self.__next_f=$(grep -c 'self.__next_f' /tmp/e.html)"
-          grep -oiE '"(title|name)":"[^"]*python[^"]*"' /tmp/e.html | head -5
-          grep -oE 'https://[a-z0-9.-]*(algolia|edx)[a-z0-9./_-]*search[^"]*' /tmp/e.html | sort -u | head -5
-          sec "edX catalog api guesses"
-          for u in "https://www.edx.org/api/v1/catalog/search?q=python" "https://discovery.edx.org/api/v1/search/all/?q=python"; do echo "$u -> $(curl -s -o /dev/null -w '%{http_code} %{content_type}' -m 20 -A "$UA" "$u")"; done
-
-          sec "Junyi: embedded data?"
-          g "https://www.junyiacademy.org/" > /tmp/j.html
-          echo "next_data=$(grep -c '__NEXT_DATA__' /tmp/j.html)"
-          grep -oE '<script id="__NEXT_DATA__"[^>]*>' /tmp/j.html | head -1
-          sed -n 's/.*<script id="__NEXT_DATA__"[^>]*>\(.*\)<\/script>.*/\1/p' /tmp/j.html | head -c 1200
-          echo; g "https://www.junyiacademy.org/api/v2/topictree/topics?lang=zh-hant" | head -c 400
-
-          sec "Coursera: catalog api paging + site search page"
-          g "https://api.coursera.org/api/courses.v1?limit=1&fields=name" | jq -c '{paging, n:(.elements|length)}'
-          g "https://api.coursera.org/api/courses.v1?q=search&query=python&limit=1&fields=name" | head -c 200
-          echo; curl -s -o /dev/null -w "search page: %{http_code} %{size_download}\n" -m 20 -A "$UA" "https://www.coursera.org/search?query=python"
+          sec "Coursera search page: SSR data?"
+          g "https://www.coursera.org/search?query=python" > /tmp/c.html
+          echo "len=$(wc -c < /tmp/c.html) next_data=$(grep -c '__NEXT_DATA__' /tmp/c.html) apollo=$(grep -ci 'apollo' /tmp/c.html)"
+          grep -oE '"name":"[^"]{4,80}"' /tmp/c.html | sort -u | head -12
+          grep -oE '/learn/[a-z0-9-]+' /tmp/c.html | sort -u | head -8
