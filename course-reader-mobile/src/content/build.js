@@ -29,7 +29,19 @@ export function titleFromUrl(url) {
     .replace(/[_-]+/g, ' ')
     .trim();
 }
-const titleOf = (text, url) => { const t = clean(text); return !t || GENERIC_TEXT.test(t) ? titleFromUrl(url) : t; };
+// 檔名是一長串雜湊（如 637ca1c7a1cac1f4…）時沒有參考價值，改用連結文字或所在區塊的標題
+const HASHY = /^[0-9a-f]{16,}$/i;
+const isHashy = (s) => HASHY.test(s.replace(/[\s_-]+/g, ''));
+
+function titleOf(text, url, section = '') {
+  const t = clean(text);
+  if (t && !GENERIC_TEXT.test(t)) return t;
+  const fromUrl = titleFromUrl(url);
+  if (fromUrl && !isHashy(fromUrl)) return fromUrl;
+  const sec = clean(section);
+  if (sec && t) return `${sec}（${t}）`;
+  return sec || t || `${(url.split(/[?#]/)[0].match(/\.([a-z0-9]+)$/i)?.[1] ?? '附件').toUpperCase()} 檔案`;
+}
 const hostOf = (u) => { try { return new URL(u).hostname; } catch { return ''; } };
 
 function videoFrom(src) {
@@ -61,7 +73,7 @@ export function buildContent(raw) {
   for (const l of raw.links ?? []) {
     // 頁面已有嵌入的影片時，「下載影片」連結只是同一部影片的檔案，不另列
     if (hasEmbedded && /download|下載/i.test(l.text)) continue;
-    addVideo(l.href, GENERIC_TEXT.test(clean(l.text)) ? titleFromUrl(l.href) : l.text, l.section);
+    addVideo(l.href, GENERIC_TEXT.test(clean(l.text)) ? titleOf(l.text, l.href, l.section) : l.text, l.section);
   }
 
   const materials = [];
@@ -74,12 +86,12 @@ export function buildContent(raw) {
     let ext = extOf(l.href);
     let title;
     if (direct) {
-      title = titleOf(text, l.href);
+      title = titleOf(text, l.href, l.section);
     } else {
       // 資源頁：翻頁連結、選單、影片頁不算；其餘要有檔案類型提示，或能從文字／區塊歸類才算檔案
       if (l.nav || PAGER.test(text)) continue;
       const hint = (text.match(EXT_HINT) || l.href.match(/_(pdf|pptx?|docx?|xlsx?|zip)\/?$/i) || [])[1];
-      title = titleOf(text.replace(EXT_HINT_PAREN, ''), l.href);
+      title = titleOf(text.replace(EXT_HINT_PAREN, ''), l.href, l.section);
       const cat = classifyMaterial({ title, section: l.section, url: l.href });
       if (!hint && (cat === 'other' || VIDEO_WORDS.test(`${text} ${l.section}`))) continue;
       ext = hint ? hint.toLowerCase() : 'file';

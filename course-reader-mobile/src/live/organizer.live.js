@@ -60,3 +60,14 @@ test('真實 OCW 課程的各類頁面都能整理出分類內容', async () => 
   const gallery = await organize(`${COURSE}video_galleries/lecture-videos/`);
   console.log('gallery raw frames/videos/links:', gallery.raw.frames.length, gallery.raw.videos.length, gallery.raw.links.length);
 });
+
+test('新來源的課程頁：整理器實際抓到什麼（耶魯、陽明交大）', async () => {
+  const targets = [
+    'https://oyc.yale.edu/astronomy/astr-160',
+    'https://ocw.nycu.edu.tw/?course_page=all-course/college-of-science/am/calculus-a-ii-academic-109',
+  ];
+  for (const url of targets) {
+    const { content, tabs, raw } = await organize(url);
+    console.log(`[${url}] tabs=${tabs.map((t) => `${t.label}:${t.count}`).join(' | ') || '(none)'}; related sample: ${content.related.slice(0, 8).map((r) => `${r.title}->${r.url.slice(-45)}`).join(' ; ')}; frames=${raw.frames.map((f) => f.src.slice(0, 60)).join(' , ')}`);
+  }
+});

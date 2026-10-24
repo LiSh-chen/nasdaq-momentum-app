@@ -148,3 +148,15 @@ describe('真實 OCW 頁面暴露的情況', () => {
     expect(tabsOf(c, { hideRelated: true }).map((t) => t.key)).not.toContain('related');
   });
 });
+
+test('檔名是雜湊時改用連結文字或所在區塊當標題', () => {
+  const c = buildContent({
+    url: 'https://ocw.example.edu/c/', title: 't',
+    links: [
+      { href: 'https://ocw.example.edu/c/637ca1c7a1cac1f493c781ec6a3f54_lecture.pdf', text: 'English', section: '' },
+      { href: 'https://ocw.example.edu/c/637ca1c7a1cac1f493c781ec6a3f54a1.pdf', text: 'English', section: 'Lecture Transcript' },
+      { href: 'https://ocw.example.edu/c/637ca1c7a1cac1f493c781ec6a3f54a2.pdf', text: '', section: '' },
+    ],
+  });
+  expect(c.materials.map((m) => m.title)).toEqual(['lecture', 'Lecture Transcript（English）', 'PDF 檔案']);
+});
