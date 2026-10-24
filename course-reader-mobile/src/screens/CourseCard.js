@@ -10,7 +10,7 @@ export default function CourseCard({ course, onPress, footer }) {
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={2}>{course.title}</Text>
         <Text style={styles.source} numberOfLines={1}>
-          {course.sourceName}{course.free ? ' · 免費' : ''}{course.unified ? ' · 統一閱讀' : ' · 需登入網頁'}
+          {course.sourceName}{course.free ? ' · 免費' : ''}{course.requiresLogin ? ' · 需登入' : ''}
         </Text>
         {meta ? <Text style={styles.meta} numberOfLines={1}>{meta}</Text> : null}
         {footer}

@@ -1,4 +1,4 @@
-import { stripHtml } from '../text';
+import { stripHtml } from '../text.js';
 
 // MIT Learn 公開 API：彙整 MIT OpenCourseWare、MITx 等來源的課程目錄，不需金鑰
 const BASE = 'https://api.learn.mit.edu/api/v1';
@@ -51,6 +51,7 @@ export function normalizeCourse(r) {
     instructors: (run.instructors ?? []).map((i) => i.full_name).filter(Boolean),
     features: r.course_feature ?? [],
     free: r.free !== false,
+    requiresLogin: code !== 'ocw',
     // 開放授權（CC）的 OCW 課程才用統一介面閱讀；其餘來源需登入，改用 App 內網頁
     unified: code === 'ocw',
   };

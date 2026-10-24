@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { LEVEL_NAMES, SOURCE_NAMES, searchCourses } from '../api/mitLearn';
+import { LEVEL_NAMES, SOURCE_NAMES } from '../api/mitLearn';
+import { PROVIDERS, searchCatalog } from '../api/search';
 import { Chip, colors } from '../ui';
 import CourseCard from './CourseCard';
 
-const EMPTY = { items: [], count: 0, facets: {}, loading: false, error: null, hasMore: false };
 
 // 已選的項目即使不在這次的篩選統計裡，也要留在列上讓使用者能取消
 const withSelected = (list = [], selected) =>
@@ -12,31 +12,33 @@ const withSelected = (list = [], selected) =>
 
 export default function Explore({ onOpenCourse }) {
   const [query, setQuery] = useState('');
+  const [provider, setProvider] = useState('all');
   const [filters, setFilters] = useState({ offeredBy: null, level: null, topic: null, hasVideos: false, sort: null });
-  const [state, setState] = useState({ ...EMPTY, loading: true });
+  const [state, setState] = useState({ items: [], count: 0, facets: {}, loading: true, error: null, next: null, failed: 0 });
   const reqId = useRef(0);
 
   const run = useCallback(
-    async (offset, append) => {
+    async (cursor, append) => {
       const id = ++reqId.current;
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
-        const r = await searchCourses({ q: query, ...filters, offset });
+        const r = await searchCatalog({ provider, q: query, ...filters, cursor });
         if (id !== reqId.current) return; // 已有較新的搜尋，丟棄舊結果
         setState((s) => ({
           items: append ? [...s.items, ...r.items] : r.items,
           count: r.count,
-          facets: append ? s.facets : r.facets,
-          hasMore: r.hasMore,
+          facets: append ? s.facets : r.facets ?? {},
+          next: r.next ?? null,
+          failed: r.failed ?? 0,
           loading: false,
           error: null,
         }));
       } catch {
         if (id !== reqId.current) return;
-        setState((s) => ({ ...s, loading: false, error: '載入失敗，請檢查網路後下拉或再試一次' }));
+        setState((s) => ({ ...s, loading: false, error: '載入失敗，請檢查網路後再試一次' }));
       }
     },
-    [query, filters]
+    [provider, query, filters]
   );
 
   useEffect(() => {
@@ -44,6 +46,10 @@ export default function Explore({ onOpenCourse }) {
     return () => clearTimeout(t);
   }, [run]);
 
+  const pickProvider = (id) => {
+    setProvider(id);
+    setFilters({ offeredBy: null, level: null, topic: null, hasVideos: false, sort: null });
+  };
   const set = (key, value) => setFilters((f) => ({ ...f, [key]: f[key] === value ? null : value }));
   const { facets } = state;
 
@@ -60,7 +66,14 @@ export default function Explore({ onOpenCourse }) {
         />
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
-        <Chip label="全部來源" active={!filters.offeredBy} onPress={() => setFilters((f) => ({ ...f, offeredBy: null }))} />
+        {PROVIDERS.map((p) => (
+          <Chip key={p.id} label={p.label} active={provider === p.id} onPress={() => pickProvider(p.id)} />
+        ))}
+      </ScrollView>
+      {provider === 'mit' ? (
+        <View>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+        <Chip label="所有 MIT 課程" active={!filters.offeredBy} onPress={() => setFilters((f) => ({ ...f, offeredBy: null }))} />
         {withSelected(facets.offered_by, filters.offeredBy).map((f) => (
           <Chip key={f.key} label={SOURCE_NAMES[f.key] ?? f.key.toUpperCase()} active={filters.offeredBy === f.key}
             onPress={() => set('offeredBy', f.key)} />
@@ -78,8 +91,13 @@ export default function Explore({ onOpenCourse }) {
           <Chip key={f.key} label={f.key} active={filters.topic === f.key} onPress={() => set('topic', f.key)} />
         ))}
       </ScrollView>
+        </View>
+      ) : null}
       <Text style={styles.count}>{state.loading && !state.items.length ? '搜尋中…' : `共 ${state.count} 門課程`}</Text>
       {state.error ? <Text style={styles.error}>{state.error}</Text> : null}
+      {state.failed ? <Text style={styles.note}>有 {state.failed} 個來源暫時無法連線，已先顯示其他來源的結果。</Text> : null}
+      {provider === 'nycu' && !query.trim() ? <Text style={styles.note}>請輸入關鍵字搜尋陽明交大課程。</Text> : null}
+      <Text style={styles.note}>臺大、Coursera、edX 等網站不開放自動搜尋，請到「網站」分頁瀏覽後按「整理」。</Text>
     </View>
   );
 
@@ -92,7 +110,7 @@ export default function Explore({ onOpenCourse }) {
       ListHeaderComponent={header}
       ListFooterComponent={state.loading ? <ActivityIndicator style={{ margin: 16 }} /> : null}
       ListEmptyComponent={!state.loading && !state.error ? <Text style={styles.empty}>找不到符合的課程</Text> : null}
-      onEndReached={() => state.hasMore && !state.loading && run(state.items.length, true)}
+      onEndReached={() => state.next !== null && !state.loading && run(state.next, true)}
       onEndReachedThreshold={0.6}
       keyboardShouldPersistTaps="handled"
     />
@@ -105,6 +123,7 @@ const styles = StyleSheet.create({
   input: { backgroundColor: colors.card, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 },
   chips: { paddingHorizontal: 12, paddingVertical: 6 },
   count: { color: colors.muted, fontSize: 12, paddingHorizontal: 14, paddingVertical: 6 },
+  note: { color: colors.muted, fontSize: 11, paddingHorizontal: 14, paddingBottom: 6 },
   error: { color: '#b91c1c', paddingHorizontal: 14, paddingBottom: 8 },
   empty: { textAlign: 'center', color: colors.muted, padding: 32 },
 });

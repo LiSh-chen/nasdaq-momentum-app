@@ -1,20 +1,19 @@
 import React from 'react';
+import { FlatList } from 'react-native';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import Explore from './Explore';
-import { searchCourses } from '../api/mitLearn';
+import { searchCatalog } from '../api/search';
 
-jest.mock('../api/mitLearn', () => ({
-  ...jest.requireActual('../api/mitLearn'),
-  searchCourses: jest.fn(),
-}));
+jest.mock('../api/search', () => ({ ...jest.requireActual('../api/search'), searchCatalog: jest.fn() }));
 
 const course = (id, title, extra = {}) => ({
   id, title, description: '', image: null, url: `https://ocw.mit.edu/courses/${id}/`, sourceCode: 'ocw',
-  sourceName: 'MIT OpenCourseWare', topics: ['Physics'], levels: ['Undergraduate'], instructors: [], features: [], free: true, unified: true, ...extra,
+  sourceName: 'MIT OpenCourseWare', topics: ['Physics'], levels: ['Undergraduate'], instructors: [], features: [], free: true,
+  requiresLogin: false, unified: true, ...extra,
 });
 
 const result = (items, extra = {}) => ({
-  items, count: items.length, hasMore: false,
+  items, count: items.length, next: null,
   facets: {
     offered_by: [{ key: 'ocw', count: 10 }, { key: 'mitx', count: 3 }],
     level: [{ key: 'undergraduate', count: 8 }],
@@ -24,48 +23,102 @@ const result = (items, extra = {}) => ({
 });
 
 const flush = () => act(async () => { jest.advanceTimersByTime(500); });
+const last = () => searchCatalog.mock.calls.at(-1)[0];
 
 beforeEach(() => {
   jest.useFakeTimers();
-  searchCourses.mockReset();
-  searchCourses.mockResolvedValue(result([course(1, 'Classical Mechanics'), course(2, 'Quantum Physics', { sourceCode: 'mitx', unified: false })]));
+  searchCatalog.mockReset();
+  searchCatalog.mockResolvedValue(result([
+    course(1, 'Classical Mechanics'),
+    course(2, 'Quantum Physics', { sourceCode: 'mitx', sourceName: 'MITx', requiresLogin: true, unified: false }),
+  ]));
 });
 afterEach(() => jest.useRealTimers());
 
-test('開啟後載入課程並顯示篩選選項', async () => {
-  const { getByText, getAllByText } = render(<Explore onOpenCourse={() => {}} />);
+test('開啟後預設搜尋「全部」來源並顯示課程；需登入的課程有標示', async () => {
+  const { getByText, queryByText } = render(<Explore onOpenCourse={() => {}} />);
   await flush();
+  expect(last()).toMatchObject({ provider: 'all', q: '' });
   expect(getByText('Classical Mechanics')).toBeTruthy();
   expect(getByText('共 2 門課程')).toBeTruthy();
-  expect(getAllByText('MIT OpenCourseWare', { exact: false }).length).toBeGreaterThanOrEqual(2); // 篩選標籤 + 課程卡片
-  expect(getByText('大學部')).toBeTruthy();
-  expect(getByText('MITx')).toBeTruthy();
+  expect(getByText(/MITx · 免費 · 需登入/)).toBeTruthy();
+  expect(queryByText(/MIT OpenCourseWare · 免費 · 需登入/)).toBeNull();
 });
 
-test('輸入關鍵字會（延遲後）以 q 搜尋', async () => {
-  const { getByPlaceholderText } = render(<Explore onOpenCourse={() => {}} />);
-  await flush();
-  searchCourses.mockClear();
-  fireEvent.changeText(getByPlaceholderText('搜尋課程、主題、講師…'), 'quantum');
-  await flush();
-  expect(searchCourses).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'quantum', offset: 0 }));
-});
-
-test('點選篩選會重新搜尋，再點一次取消', async () => {
+test('來源切換列：全部、MIT、耶魯、陽明交大', async () => {
   const { getByText } = render(<Explore onOpenCourse={() => {}} />);
   await flush();
+  for (const label of ['全部', 'MIT', '耶魯', '陽明交大']) expect(getByText(label)).toBeTruthy();
+  fireEvent.press(getByText('耶魯'));
+  await flush();
+  expect(last().provider).toBe('yale');
+  fireEvent.press(getByText('陽明交大'));
+  await flush();
+  expect(last().provider).toBe('nycu');
+});
+
+test('MIT 專屬的篩選只在選了 MIT 時出現，切換來源會清除篩選', async () => {
+  const { getByText, queryByText } = render(<Explore onOpenCourse={() => {}} />);
+  await flush();
+  expect(queryByText('有講課影片')).toBeNull();
+  fireEvent.press(getByText('MIT'));
+  await flush();
   fireEvent.press(getByText('大學部'));
   await flush();
-  expect(searchCourses).toHaveBeenLastCalledWith(expect.objectContaining({ level: 'undergraduate' }));
-  fireEvent.press(getByText('大學部'));
-  await flush();
-  expect(searchCourses).toHaveBeenLastCalledWith(expect.objectContaining({ level: null }));
+  expect(last()).toMatchObject({ provider: 'mit', level: 'undergraduate' });
   fireEvent.press(getByText('有講課影片'));
   await flush();
-  expect(searchCourses).toHaveBeenLastCalledWith(expect.objectContaining({ hasVideos: true }));
-  fireEvent.press(getByText('MITx'));
+  expect(last().hasVideos).toBe(true);
+  fireEvent.press(getByText('耶魯'));
   await flush();
-  expect(searchCourses).toHaveBeenLastCalledWith(expect.objectContaining({ offeredBy: 'mitx' }));
+  expect(queryByText('有講課影片')).toBeNull();
+  expect(last()).toMatchObject({ provider: 'yale', level: null, hasVideos: false });
+});
+
+test('輸入關鍵字會（延遲後）搜尋；陽明交大沒有關鍵字時提示輸入', async () => {
+  const { getByPlaceholderText, getByText, queryByText } = render(<Explore onOpenCourse={() => {}} />);
+  await flush();
+  fireEvent.press(getByText('陽明交大'));
+  await flush();
+  expect(getByText('請輸入關鍵字搜尋陽明交大課程。')).toBeTruthy();
+  searchCatalog.mockClear();
+  fireEvent.changeText(getByPlaceholderText('搜尋課程、主題、講師…'), '微積分');
+  await flush();
+  expect(last()).toMatchObject({ provider: 'nycu', q: '微積分' });
+  expect(queryByText('請輸入關鍵字搜尋陽明交大課程。')).toBeNull();
+});
+
+test('捲到底時以來源給的位置載入下一頁並接在後面', async () => {
+  searchCatalog.mockResolvedValueOnce(result([course(1, 'A')], { next: 20 }));
+  const { getByText, UNSAFE_getByType } = render(<Explore onOpenCourse={() => {}} />);
+  await flush();
+  searchCatalog.mockResolvedValueOnce(result([course(2, 'B')]));
+  await act(async () => { UNSAFE_getByType(FlatList).props.onEndReached(); });
+  expect(last().cursor).toBe(20);
+  expect(getByText('A')).toBeTruthy();
+  expect(getByText('B')).toBeTruthy();
+});
+
+test('已沒有下一頁時不會再載入', async () => {
+  const { UNSAFE_getByType } = render(<Explore onOpenCourse={() => {}} />);
+  await flush();
+  searchCatalog.mockClear();
+  await act(async () => { UNSAFE_getByType(FlatList).props.onEndReached(); });
+  expect(searchCatalog).not.toHaveBeenCalled();
+});
+
+test('部分來源連線失敗時提示，仍顯示其他結果', async () => {
+  searchCatalog.mockResolvedValue(result([course(1, 'Classical Mechanics')], { failed: 1 }));
+  const { getByText } = render(<Explore onOpenCourse={() => {}} />);
+  await flush();
+  expect(getByText(/有 1 個來源暫時無法連線/)).toBeTruthy();
+  expect(getByText('Classical Mechanics')).toBeTruthy();
+});
+
+test('不開放搜尋的網站會說明改走「網站」分頁', async () => {
+  const { getByText } = render(<Explore onOpenCourse={() => {}} />);
+  await flush();
+  expect(getByText(/臺大、Coursera、edX 等網站不開放自動搜尋/)).toBeTruthy();
 });
 
 test('點課程卡片會開啟課程', async () => {
@@ -77,14 +130,14 @@ test('點課程卡片會開啟課程', async () => {
 });
 
 test('API 失敗時顯示錯誤訊息', async () => {
-  searchCourses.mockRejectedValue(new Error('net'));
+  searchCatalog.mockRejectedValue(new Error('net'));
   const { getByText } = render(<Explore onOpenCourse={() => {}} />);
   await flush();
   expect(getByText(/載入失敗/)).toBeTruthy();
 });
 
 test('沒有結果時顯示提示', async () => {
-  searchCourses.mockResolvedValue(result([]));
+  searchCatalog.mockResolvedValue(result([]));
   const { getByText } = render(<Explore onOpenCourse={() => {}} />);
   await flush();
   expect(getByText('找不到符合的課程')).toBeTruthy();

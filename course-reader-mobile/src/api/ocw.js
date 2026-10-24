@@ -1,5 +1,5 @@
 // 解析 MIT OpenCourseWare 課程首頁的章節與單元清單
-import { decodeEntities as decode } from '../text';
+import { decodeEntities as decode } from '../text.js';
 
 const textOf = (html) => decode(html.replace(/<[^>]*>/g, ' ')).replace(/\s+/g, ' ').trim();
 
