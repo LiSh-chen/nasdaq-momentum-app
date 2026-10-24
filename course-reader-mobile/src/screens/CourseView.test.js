@@ -145,6 +145,12 @@ describe('多章節課程', () => {
     expect(onOpenChapter).not.toHaveBeenCalled();
   });
 
+  test('標題顯示該章標題；有章節時不顯示相關頁面分頁', () => {
+    const { getByText, queryByText } = withChapters(1);
+    expect(getByText('Lesson 1')).toBeTruthy();
+    expect(queryByText('相關頁面 1')).toBeNull();
+  });
+
   test('這一章沒有內容時顯示章節，不會是空白畫面', () => {
     const empty = buildContent({ url: 'https://ocw.example.edu/c/1/', title: 'Syllabus' });
     const { getByText } = render(<CourseView content={empty} chapters={chapters} chapterIndex={0} onOpenChapter={() => {}} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
@@ -158,4 +164,16 @@ test('沒有內容時提供重新整理（例如登入後回來重試）', () =>
   const { getByText } = render(<CourseView content={empty} onRefresh={onRefresh} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
   fireEvent.press(getByText('重新整理'));
   expect(onRefresh).toHaveBeenCalled();
+});
+
+test('資源頁型檔案：點開時先解析實際檔案網址，再於 App 內檢視', async () => {
+  jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, text: async () => '<a href="/static/ps1.pdf">Download</a>' });
+  const c = buildContent({
+    url: 'https://ocw.example.edu/courses/c1/', title: 't', heading: '課',
+    links: [{ href: 'https://ocw.example.edu/courses/c1/resources/ps1_pdf/', text: 'Problem Set 1', section: 'Assignments' }],
+  });
+  const { getByText, findAllByTestId } = render(<CourseView content={c} onClose={() => {}} onOpenPage={() => {}} onOpenSource={() => {}} />);
+  fireEvent.press(getByText('Problem Set 1'));
+  const views = await findAllByTestId('webview');
+  expect(views.map((v) => v.props.source.uri).filter(Boolean)[0]).toContain(encodeURIComponent('https://ocw.example.edu/static/ps1.pdf'));
 });

@@ -42,7 +42,7 @@ test('檔案依內容分類並去重，沒有連結文字時用檔名', () => {
   const c = buildContent(raw);
   const by = Object.fromEntries(c.materials.map((m) => [m.title, m.category]));
   expect(by['第一章講義']).toBe('lecture');
-  expect(by['hw1.pdf']).toBe('assignment');
+  expect(by['hw1']).toBe('assignment'); // 沒有連結文字時用檔名（去掉副檔名）
   expect(by['期中考']).toBe('exam');
   expect(by['課程大綱']).toBe('overview');
   expect(c.materials).toHaveLength(4);
@@ -78,4 +78,53 @@ test('輔助函式', () => {
   expect(extOf('https://a/b/c.PDF?x=1')).toBe('pdf');
   expect(youtubeWatchUrl({ kind: 'youtube', ref: 'abcdefghijk' })).toBe('https://www.youtube.com/watch?v=abcdefghijk');
   expect(viewerUrl('https://a/b.pdf?x=1&y=2')).toBe('https://docs.google.com/gview?embedded=1&url=https%3A%2F%2Fa%2Fb.pdf%3Fx%3D1%26y%3D2');
+});
+
+describe('真實 OCW 頁面暴露的情況', () => {
+  const page = (extra) => ({ url: 'https://ocw.example.edu/courses/c1/pages/lesson/', title: 't', ...extra });
+
+  test('有嵌入影片時，「下載影片」連結不重複列出', () => {
+    const c = buildContent(page({
+      frames: [{ src: 'https://www.youtube.com/embed/abcdefghijk', title: '', section: 'Lesson 1' }],
+      links: [{ href: 'https://archive.org/download/X/lesson_360p.mp4', text: 'download the video', section: 'Lesson 1' }],
+    }));
+    expect(c.videos).toHaveLength(1);
+    expect(c.videos[0]).toMatchObject({ kind: 'youtube', title: 'Lesson 1' });
+  });
+
+  test('只有 mp4 連結時仍列為影片，標題無意義時改用檔名', () => {
+    const c = buildContent(page({
+      links: [
+        { href: 'https://archive.org/download/X/MIT8_01F16_Demo_02_360p.mp4', text: 'video 5 MB', section: '' },
+        { href: 'https://archive.org/download/X/Lecture_03.mp4', text: '第三講', section: '' },
+      ],
+    }));
+    expect(c.videos.map((v) => v.title)).toEqual(['MIT8 01F16 Demo 02', '第三講']);
+  });
+
+  test('OCW 資源頁連結視為檔案（點開時才解析實際網址），並用檔名當標題', () => {
+    const c = buildContent(page({
+      links: [
+        { href: 'https://ocw.example.edu/courses/c1/resources/mit8_01scf16_ps01_pdf/', text: 'Problem Set 1', section: 'Assignments' },
+        { href: 'https://ocw.example.edu/courses/c1/resources/lec3_transcript_pdf/', text: 'English', section: 'Lecture 3' },
+      ],
+    }));
+    expect(c.materials).toMatchObject([
+      { title: 'Problem Set 1', ext: 'pdf', resolve: true, category: 'assignment' },
+      { title: 'lec3 transcript', ext: 'pdf', resolve: true, category: 'lecture' }, // 逐字稿歸講義
+    ]);
+    expect(c.related).toEqual([]); // 資源頁不算相關頁面
+  });
+
+  test('選單連結不列為相關頁面；有章節時不顯示相關頁面分頁', () => {
+    const c = buildContent(page({
+      links: [
+        { href: 'https://ocw.example.edu/courses/c1/pages/week-2/', text: 'Week 2', section: '', nav: true },
+        { href: 'https://ocw.example.edu/courses/c1/pages/extra/', text: '延伸閱讀', section: '', nav: false },
+      ],
+    }));
+    expect(c.related.map((r) => r.title)).toEqual(['延伸閱讀']);
+    expect(tabsOf(c).map((t) => t.key)).toContain('related');
+    expect(tabsOf(c, { hideRelated: true }).map((t) => t.key)).not.toContain('related');
+  });
 });

@@ -9,6 +9,23 @@ const MATERIAL_EXT = /\.(pdf|pptx?|docx?|xlsx?|zip|txt|tex|ipynb|py|csv)(\?|#|$)
 export const extOf = (url) => (url.split(/[?#]/)[0].match(/\.([a-z0-9]+)$/i)?.[1] ?? '').toLowerCase();
 
 const clean = (s = '') => s.replace(/\s+/g, ' ').trim();
+
+// OCW 的檔案連到「資源頁」，網址結尾是檔案類型，如 /resources/problem-set-1_pdf/
+const RESOURCE_PAGE = /\/resources\/[^/?#]*_(pdf|pptx?|docx?|xlsx?|zip)\/?(?:[?#]|$)/i;
+// 連結文字沒有意義時（語言名稱、download、檔案大小…），改用檔名當標題
+const GENERIC_TEXT = /^(english|chinese|中文|繁體中文|简体中文|download( the)?( video| file| pdf)?|下載|view|pdf|video( \d+(\.\d+)? ?[kmg]b)?|here|link|more|read more|click here)$/i;
+
+export function titleFromUrl(url) {
+  let name = '';
+  try { name = decodeURIComponent(new URL(url).pathname.split('/').filter(Boolean).pop() || ''); } catch { name = url; }
+  return name
+    .replace(/\.[a-z0-9]{2,4}$/i, '')
+    .replace(/_(pdf|pptx?|docx?|xlsx?|zip|mp4)$/i, '')
+    .replace(/[_-]?(360|480|720|1080)p$/i, '')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+}
+const titleOf = (text, url) => { const t = clean(text); return !t || GENERIC_TEXT.test(t) ? titleFromUrl(url) : t; };
 const hostOf = (u) => { try { return new URL(u).hostname; } catch { return ''; } };
 
 function videoFrom(src) {
@@ -36,16 +53,23 @@ export function buildContent(raw) {
 
   for (const f of raw.frames ?? []) addVideo(f.src, f.title, f.section);
   for (const v of raw.videos ?? []) addVideo(v.src, v.title, v.section);
-  for (const l of raw.links ?? []) addVideo(l.href, l.text, l.section);
+  const hasEmbedded = videos.length > 0;
+  for (const l of raw.links ?? []) {
+    // 頁面已有嵌入的影片時，「下載影片」連結只是同一部影片的檔案，不另列
+    if (hasEmbedded && /download|下載/i.test(l.text)) continue;
+    addVideo(l.href, GENERIC_TEXT.test(clean(l.text)) ? titleFromUrl(l.href) : l.text, l.section);
+  }
 
   const materials = [];
   const matSeen = new Set();
   for (const l of raw.links ?? []) {
-    if (!MATERIAL_EXT.test(l.href) || matSeen.has(l.href)) continue;
+    const page = l.href.match(RESOURCE_PAGE);
+    if ((!MATERIAL_EXT.test(l.href) && !page) || matSeen.has(l.href)) continue;
     matSeen.add(l.href);
-    const title = clean(l.text) || decodeURIComponent(l.href.split(/[?#]/)[0].split('/').pop() || l.href);
+    const title = titleOf(l.text, l.href);
     materials.push({
-      id: l.href, title, url: l.href, ext: extOf(l.href), section: clean(l.section),
+      id: l.href, title, url: l.href, ext: page ? page[1].toLowerCase() : extOf(l.href), section: clean(l.section),
+      resolve: Boolean(page), // 資源頁：點開時再取得實際的檔案網址
       category: classifyMaterial({ title, section: l.section, url: l.href }),
     });
   }
@@ -58,8 +82,8 @@ export function buildContent(raw) {
   for (const l of raw.links ?? []) {
     const u = l.href.split('#')[0];
     const text = clean(l.text);
-    if (hostOf(u) !== host || !text || text.length > 60) continue;
-    if (MATERIAL_EXT.test(u) || videoFrom(u) || u.replace(/\/+$/, '') === here || relSeen.has(u)) continue;
+    if (l.nav || hostOf(u) !== host || !text || text.length > 60) continue;
+    if (MATERIAL_EXT.test(u) || RESOURCE_PAGE.test(u) || videoFrom(u) || u.replace(/\/+$/, '') === here || relSeen.has(u)) continue;
     relSeen.add(u);
     related.push({ id: u, title: text, url: u });
     if (related.length >= 40) break;
@@ -82,7 +106,8 @@ const overview = [...new Set((raw.paras ?? []).map(clean).filter((s) => s.length
 }
 
 // 有內容的分頁（依固定順序）
-export function tabsOf(content) {
+// hideRelated：多章節課程已有章節分頁，相關頁面只會重複選單
+export function tabsOf(content, { hideRelated = false } = {}) {
   const by = (cat) => content.materials.filter((m) => m.category === cat);
   const tabs = [];
   if (content.overview.length || content.outline.length || by('overview').length) {
@@ -93,7 +118,7 @@ export function tabsOf(content) {
     const n = by(key).length;
     if (n) tabs.push({ key, label: CATEGORY_LABELS[key], count: n });
   }
-  if (content.related.length) tabs.push({ key: 'related', label: '相關頁面', count: content.related.length });
+  if (content.related.length && !hideRelated) tabs.push({ key: 'related', label: '相關頁面', count: content.related.length });
   return tabs;
 }
 

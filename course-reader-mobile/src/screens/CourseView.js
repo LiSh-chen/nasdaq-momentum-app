@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { FlatList, Linking, Modal, Pressable, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { extOf, playerHtml, tabsOf, viewerUrl, youtubeWatchUrl } from '../content/build';
+import { playerHtml, tabsOf, viewerUrl, youtubeWatchUrl } from '../content/build';
+import { resolveFileUrl } from '../content/resolve';
 import { Btn, Chip, colors } from '../ui';
 
 const FILE_ICON = { pdf: '📄', ppt: '📊', pptx: '📊', doc: '📝', docx: '📝', zip: '🗜', xls: '📈', xlsx: '📈' };
@@ -46,7 +47,7 @@ function FileViewer({ file, onClose }) {
 export default function CourseView({ content, chapters, chapterIndex, onOpenPage, onOpenChapter, onOpenSource, onRefresh, onClose }) {
   const hasChapters = Boolean(chapters && chapters.length > 1);
   const tabs = useMemo(() => {
-    const t = tabsOf(content);
+    const t = tabsOf(content, { hideRelated: hasChapters });
     return hasChapters ? [{ key: 'chapters', label: '章節', count: chapters.length }, ...t] : t;
   }, [content, hasChapters, chapters]);
   // 有影片就先看影片；否則第一個有內容的分頁；這頁沒內容但有章節時顯示章節
@@ -56,7 +57,15 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
   const origin = useMemo(() => { try { return new URL(content.url).origin; } catch { return 'https://localhost'; } }, [content.url]);
   const video = content.videos.find((v) => v.id === videoId) ?? content.videos[0];
 
-  const openFile = (m) => (IN_APP_VIEW.test(m.ext) ? setFile(m) : Linking.openURL(m.url).catch(() => {}));
+  const openFile = async (m) => {
+    let target = m;
+    if (m.resolve) {
+      const url = await resolveFileUrl(m.url).catch(() => null);
+      if (!url) return Linking.openURL(m.url).catch(() => {});
+      target = { ...m, url };
+    }
+    return IN_APP_VIEW.test(m.ext) ? setFile(target) : Linking.openURL(target.url).catch(() => {});
+  };
   const materials = (cat) => content.materials.filter((m) => m.category === cat);
 
   const renderMaterial = (m) => (
@@ -142,7 +151,7 @@ export default function CourseView({ content, chapters, chapterIndex, onOpenPage
     <SafeAreaView style={styles.root} edges={[]}>
       <View style={styles.head}>
         <Btn label="✕" onPress={onClose} />
-        <Text style={styles.title} numberOfLines={1}>{content.title}</Text>
+        <Text style={styles.title} numberOfLines={1}>{(hasChapters && chapters[chapterIndex]?.title) || content.title}</Text>
         <Btn label="原頁面" onPress={() => onOpenSource(content.url)} />
       </View>
 

@@ -13,7 +13,7 @@ export const CATEGORY_LABELS = {
 const RULES = [
   ['exam', /考試|期中|期末|測驗|試題|exam|quiz|midterm|final/i],
   ['assignment', /作業|習題|assignment|homework|problem[\s_-]?sets?|\bhw\s?\d|\bps\s?\d|exercises?|projects?/i],
-  ['lecture', /講義|筆記|投影片|簡報|教材|lectures?|slides?|notes?|ppt/i],
+  ['lecture', /講義|筆記|投影片|簡報|教材|逐字稿|字幕|lectures?|slides?|notes?|ppt|transcripts?|subtitles?/i],
   ['reading', /閱讀|參考|教科書|課本|textbook|reading|reference/i],
   ['overview', /大綱|綱要|課程簡介|syllabus|schedule|calendar|課表|進度/i],
 ];

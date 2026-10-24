@@ -51,7 +51,7 @@ test('擷取結果交給 buildContent 後得到正確的分類', () => {
   expect(content.videos).toHaveLength(2);
   const cat = Object.fromEntries(content.materials.map((m) => [m.title, m.category]));
   expect(cat).toMatchObject({ '課程大綱 PDF': 'overview', '第一章講義': 'lecture', '第二章投影片': 'lecture', '作業一': 'assignment' });
-  expect(tabsOf(content).map((t) => t.key)).toEqual(['overview', 'videos', 'lecture', 'assignment', 'related']);
+  expect(tabsOf(content).map((t) => t.key)).toEqual(['overview', 'videos', 'lecture', 'assignment']); // <nav> 內的連結不算相關頁面
 });
 
 test('遇到 Cloudflare 驗證頁時回報 challenge，不當成內容', () => {
@@ -63,4 +63,16 @@ test('頁面沒有 main 時退回整個 body，不會出錯', () => {
   const raw = extract('<html><head><title>t</title></head><body><h2>影片</h2><iframe src="https://youtu.be/dQw4w9WgXcQ"></iframe></body></html>');
   expect(raw.type).toBe('content');
   expect(raw.frames).toHaveLength(1);
+});
+
+test('排除選單與側欄：說明文字不含選單項目，選單連結標記為 nav', () => {
+  const raw = extract(`<html><head><title>t</title></head><body><main>
+    <div class="course-nav"><ul><li>Syllabus About the Team Readings</li><li><a href="/pages/week-1/">Week 1</a></li></ul></div>
+    <h1>Classical Mechanics</h1>
+    <p>This course introduces classical mechanics for first-year students.</p>
+    <a href="/pages/extra/">延伸閱讀</a>
+  </main></body></html>`);
+  expect(raw.paras).toEqual(['This course introduces classical mechanics for first-year students.']);
+  expect(raw.links.find((l) => l.href.endsWith('/week-1/')).nav).toBe(true);
+  expect(raw.links.find((l) => l.href.endsWith('/extra/')).nav).toBe(false);
 });

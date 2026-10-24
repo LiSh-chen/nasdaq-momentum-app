@@ -13,6 +13,9 @@ export const EXTRACT_JS = `
     var text = function (e) { return (e.textContent || '').replace(/\\s+/g, ' ').trim(); };
     var root = document.querySelector('#course-main-content, main, article, [role=main], #content, .content') || document.body;
     var isHeading = function (e) { return e && /^H[1-6]$/.test(e.tagName); };
+    // 選單、側欄、頁首頁尾等版面元素，不算課程內容
+    var CHROME = 'nav,aside,header,footer,[role=navigation],[class*=nav i],[id*=nav i],[class*=menu i],[id*=menu i],[class*=sidebar i],[class*=breadcrumb i]';
+    var inChrome = function (e) { return Boolean(e.closest && e.closest(CHROME)); };
 
     // 往上、往前找最近的標題，作為這個項目的「所在區塊」
     function sectionOf(el) {
@@ -30,11 +33,12 @@ export const EXTRACT_JS = `
       return '';
     }
 
-    var headings = [].slice.call(root.querySelectorAll('h1,h2,h3,h4')).map(function (e) {
+    var headings = [].slice.call(root.querySelectorAll('h1,h2,h3,h4')).filter(function (e) { return !inChrome(e); }).map(function (e) {
       return { level: Number(e.tagName.charAt(1)), text: text(e) };
     }).filter(function (h) { return h.text; }).slice(0, 80);
 
-    var paras = [].slice.call(root.querySelectorAll('p,li,td')).map(text).filter(function (s) {
+    // 說明文字只取段落與資訊表格；清單項目多半是選單
+    var paras = [].slice.call(root.querySelectorAll('p,dd,td,blockquote')).filter(function (e) { return !inChrome(e); }).map(text).filter(function (s) {
       return s.length >= 8 && s.length < 600;
     }).slice(0, 60);
 
@@ -48,8 +52,8 @@ export const EXTRACT_JS = `
     }).filter(function (v) { return v.src; });
 
     var links = [].slice.call(document.querySelectorAll('a[href]')).map(function (a) {
-      return { href: abs(a.getAttribute('href')), text: text(a), section: sectionOf(a) };
-    }).filter(function (l) { return /^https?:/.test(l.href); }).slice(0, 500);
+      return { href: abs(a.getAttribute('href')), text: text(a), section: sectionOf(a), nav: inChrome(a) };
+    }).filter(function (l) { return /^https?:/.test(l.href); }).slice(0, 800);
 
     var h1 = document.querySelector('h1');
     post({
